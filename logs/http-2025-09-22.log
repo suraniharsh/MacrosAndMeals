@@ -112,3 +112,4 @@
 {"action":"User registered successfully","category":"authentication","email":"trainer@example.com","level":"info","message":"Auth: User registered successfully","role":"TRAINER","timestamp":"2025-09-22 18:22:20","userId":"cmfv4lyxe0001tv04avdgzj67"}
 {"action":"Trainer creation successful","adminId":"cmfv4c1b40001tv5kalxvi2ag","category":"authentication","createdBy":"admin2@admin.com","email":"trainer@example.com","ip":"::1","level":"info","message":"Auth: Trainer creation successful","requestId":"7w2qdtwvz4oy8bax8ix94","timestamp":"2025-09-22 18:22:20","trainerId":"cmfv4lyxe0001tv04avdgzj67","userAgent":"PostmanRuntime/7.43.4"}
 {"duration":369,"ip":"::1","level":"http","message":"Outgoing response","requestId":"7w2qdtwvz4oy8bax8ix94","responseSize":1116,"statusCode":201,"timestamp":"2025-09-22 18:22:20","userAgent":"PostmanRuntime/7.43.4"}
+{"level":"info","message":"JWT configuration validated successfully","timestamp":"2025-09-22 18:22:39"}
