@@ -1,0 +1,188 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider          = "mysql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+// Enums
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum MeasurementStandard {
+  US_STANDARD
+  METRIC
+}
+
+enum ActivityLevel {
+  LOW // 1
+  MEDIUM_LOW // 2
+  MEDIUM // 3
+  MEDIUM_HIGH // 4
+  HIGH // 5
+}
+
+enum FitnessGoal {
+  WEIGHT_LOSS
+  DECREASE_BODY_FAT
+  INCREASE_LEAN_MUSCLE
+  WEIGHT_GAIN
+  OVERALL_WELLNESS
+  NONE
+}
+
+enum MealPlanCategory {
+  ANTI_INFLAMMATORY
+  AVOHEALTH
+  AYURVEDIC
+  BALANCED
+  BRAIN_BOOSTING
+  DAIRY_FREE
+  DASH_DIET
+  DETOX
+  DIABETIC_FRIENDLY
+  GLUTEN_FREE
+  GUT_HEALTH
+  HEART_HEALTHY
+  HIGH_PROTEIN
+  HORMONE_BALANCE
+  IMMUNE_BOOSTING
+  INTERMITTENT_FASTING
+  KETO
+  LOW_CARB
+  LOW_GLYCEMIC
+  MEDITERRANEAN
+  MUSCLE_BUILDING
+  PCOS_FRIENDLY
+  PESCATARIAN
+  POSTPARTUM
+  PREGNANCY
+  THYROID_SUPPORT
+  VEGAN
+  VEGETARIAN
+  WEIGHT_GAIN_PLAN
+  WEIGHT_LOSS_PLAN
+}
+
+enum AccessLevel {
+  TRACK_MY_PROGRESS
+  SELF_SERVICE_PLAN
+  NONE
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  TRAINER
+  CUSTOMER
+}
+
+// Models
+model SuperAdmin {
+  id          String   @id @default(cuid())
+  firstName   String   @map("first_name")
+  lastName    String   @map("last_name")
+  email       String   @unique
+  phoneNumber String   @map("phone_number")
+  password    String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relationships - SuperAdmin manages Admins
+  admins Admin[]
+
+  @@map("super_admins")
+}
+
+model Admin {
+  id          String     @id @default(cuid())
+  firstName   String     @map("first_name")
+  lastName    String     @map("last_name")
+  email       String     @unique
+  phoneNumber String     @map("phone_number")
+  password    String
+  status      UserStatus @default(ACTIVE)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  // Relationships - Admin belongs to SuperAdmin and manages Trainers
+  superAdminId String?     @map("super_admin_id")
+  superAdmin   SuperAdmin? @relation(fields: [superAdminId], references: [id], onDelete: SetNull)
+  trainers     Trainer[]
+
+  @@map("admins")
+}
+
+model Trainer {
+  id          String     @id @default(cuid())
+  firstName   String     @map("first_name")
+  lastName    String     @map("last_name")
+  email       String     @unique
+  phoneNumber String     @map("phone_number")
+  password    String
+  status      UserStatus @default(ACTIVE)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  // Relationships - Trainer belongs to Admin and manages Customers
+  adminId   String?    @map("admin_id")
+  admin     Admin?     @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  customers Customer[]
+
+  @@map("trainers")
+}
+
+model Customer {
+  id                  String              @id @default(cuid())
+  firstName           String              @map("first_name")
+  lastName            String              @map("last_name")
+  email               String              @unique
+  phoneNumber         String              @map("phone_number")
+  password            String
+  birthDate           DateTime            @map("birth_date")
+  gender              Gender
+  measurementStandard MeasurementStandard @map("measurement_standard")
+  height              Float // in inches for US, cm for metric
+  weight              Float // in pounds for US, kg for metric
+  activityLevel       ActivityLevel       @map("activity_level")
+  mealsPerDay         Int                 @map("meals_per_day") // 1 to 10
+  fitnessGoal         FitnessGoal         @map("fitness_goal")
+  mealPlanCategory    MealPlanCategory    @map("meal_plan_category")
+  accessLevel         AccessLevel         @map("access_level")
+  accessGranted       Boolean             @default(false) @map("access_granted")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  // Relationships
+  trainerId String?  @map("trainer_id")
+  trainer   Trainer? @relation(fields: [trainerId], references: [id], onDelete: SetNull)
+
+  @@map("customers")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique @db.VarChar(512)
+  userId    String   @map("user_id")
+  userRole  UserRole @map("user_role")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("refresh_tokens")
+}

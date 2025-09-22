@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 30
+    },
+    "auditLog": "D:\\MacrosAndMeals\\logs\\.1923d3f8d2c7cdd85801b26e8089b6190bcb521e-audit.json",
+    "files": [
+        {
+            "date": 1758543461422,
+            "name": "D:\\MacrosAndMeals\\logs\\combined-2025-09-22.log",
+            "hash": "11f7f8db9ecef7dce3574898d88de15652aa650bf6c0aa29e68b7433de4215e3"
+        }
+    ],
+    "hashType": "sha256"
+}

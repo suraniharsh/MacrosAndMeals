@@ -1,0 +1,29 @@
+{
+  "name": "macrosandmeals",
+  "version": "0.0.1",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js"
+  },
+  "author": "Surani Harsh",
+  "license": "ISC",
+  "description": "A backend API that powers an all-in-one online platform, helping users create personalized diet plans in just three easy steps. Whether aiming to lose weight, gain muscle, or eat healthier, this science-based API simplifies meal planning and makes the process straightforward and stress-free. This is a backend-focused project designed to handle user data, diet recommendations, and integration with front-end platforms.",
+  "dependencies": {
+    "@prisma/client": "^6.16.2",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "joi": "^18.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.1",
+    "winston": "^3.11.0",
+    "winston-daily-rotate-file": "^4.7.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10",
+    "prisma": "^6.16.2"
+  }
+}
