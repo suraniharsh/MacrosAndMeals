@@ -3,6 +3,7 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
 # Environment variables
 .env
@@ -10,11 +11,17 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env.example
 
 # Logs
 logs/
 *.log
 /logs
+combined*.log
+error*.log
+http*.log
+logs/*
+logs/**/*
 
 # Runtime data
 pids
@@ -80,42 +87,110 @@ ehthumbs.db
 Thumbs.db
 
 # Prisma
-/src/generated/prisma
+/src/generated/prisma/
+prisma/migrations/*/migration.sql
+.env.example
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
+/db/data/
 
 # Temporary files
 tmp/
 temp/
+*.tmp
+*.temp
 
 # Build directories
 dist/
 build/
 
-# Test files
+# Test files and temporary scripts
 test-results/
 coverage/
+*-test.js
+*-temp.js
+fix-*.js
+create-*.js
+check-*.js
+update-*.js
 
 # Docker
 .dockerignore
 docker-compose.override.yml
+.docker/
 
 # PM2
 ecosystem.config.js
+pm2.json
 
 # Backup files
 *.backup
 *.bak
+*.orig
+
+# Stripe and Payment related
+stripe-*.json
+webhook-*.log
+
+# API Documentation
+api-docs/
+swagger-ui/
 
 # macOS
 .AppleDouble
 .LSOverride
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 
 # Windows
 desktop.ini
+Thumbs.db
+ehthumbs.db
 
 # Linux
 *~
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/settings.json
+.idea/
+*.sublime-*
+
+# Security
+*.pem
+*.key
+*.cert
+*.crt
+jwt-secret*
+
+# Uploads
+uploads/
+files/
+media/
+
+# Cache
+.cache/
+.parcel-cache/
+.eslintcache
+
+# Next.js
+.next/
+out/
+
+# Nuxt.js
+.nuxt/
+.output/
+
+# Serverless
+.serverless/
+
+# TypeScript
+*.tsbuildinfo
