@@ -23,32 +23,32 @@ export const subscriptionService = {
         planType: 'BASIC',
         price: 59.99,
         maxCustomers: 20,
-        stripeProductId: null,
-        stripePriceId: null
+        stripeProductId: process.env.STRIPE_BASIC_PRODUCT_ID || null,
+        stripePriceId: process.env.STRIPE_BASIC_PRICE_ID || null
       },
       {
         name: 'Standard Plan',
         planType: 'STANDARD',
         price: 79.99,
         maxCustomers: 40,
-        stripeProductId: null,
-        stripePriceId: null
+        stripeProductId: process.env.STRIPE_STANDARD_PRODUCT_ID || null,
+        stripePriceId: process.env.STRIPE_STANDARD_PRICE_ID || null
       },
       {
         name: 'Premium Plan',
         planType: 'PREMIUM',
         price: 99.99,
         maxCustomers: 60,
-        stripeProductId: null,
-        stripePriceId: null
+        stripeProductId: process.env.STRIPE_PREMIUM_PRODUCT_ID || null,
+        stripePriceId: process.env.STRIPE_PREMIUM_PRICE_ID || null
       },
       {
         name: 'Customer Plan',
         planType: 'CUSTOMER',
         price: 24.99,
         maxCustomers: null,
-        stripeProductId: null,
-        stripePriceId: null
+        stripeProductId: process.env.STRIPE_CUSTOMER_PRODUCT_ID || null,
+        stripePriceId: process.env.STRIPE_CUSTOMER_PRICE_ID || null
       }
     ];
 
@@ -273,6 +273,15 @@ export const subscriptionService = {
     try {
       const stripeSubscription = await stripeService.getSubscription(stripeSubscriptionId);
       
+      // Debug log the Stripe subscription data
+      log.debug('Stripe subscription data', {
+        id: stripeSubscription.id,
+        status: stripeSubscription.status,
+        current_period_start: stripeSubscription.current_period_start,
+        current_period_end: stripeSubscription.current_period_end,
+        metadata: stripeSubscription.metadata
+      });
+      
       // First try to find by stripeSubscriptionId
       let subscription = await prisma.subscription.findFirst({
         where: { stripeSubscriptionId },
@@ -282,50 +291,89 @@ export const subscriptionService = {
       if (!subscription) {
         // If not found, look for INACTIVE subscription matching the metadata
         const metadata = stripeSubscription.metadata || {};
-        if (metadata.userId && metadata.role) {
+        
+        // Try to find by subscriptionId from metadata first
+        if (metadata.subscriptionId) {
+          subscription = await prisma.subscription.findFirst({
+            where: {
+              id: metadata.subscriptionId,
+              status: 'INACTIVE'
+            },
+            include: { plan: true }
+          });
+        }
+        
+        // If still not found, try by userId and role
+        if (!subscription && metadata.userId && metadata.role) {
           subscription = await prisma.subscription.findFirst({
             where: {
               userId: metadata.userId,
               userType: metadata.role,
               status: 'INACTIVE'
             },
+            include: { plan: true },
+            orderBy: { createdAt: 'desc' } // Get the most recent one
+          });
+        }
+
+        if (subscription) {
+          // Prepare update data with proper date handling
+          const updateData = {
+            stripeSubscriptionId,
+            status: 'ACTIVE'
+          };
+
+          // Only update period dates if they exist and are valid
+          if (stripeSubscription.current_period_start) {
+            updateData.currentPeriodStart = new Date(stripeSubscription.current_period_start * 1000);
+          }
+          if (stripeSubscription.current_period_end) {
+            updateData.currentPeriodEnd = new Date(stripeSubscription.current_period_end * 1000);
+          }
+
+          // Update with Stripe subscription ID
+          subscription = await prisma.subscription.update({
+            where: { id: subscription.id },
+            data: updateData,
             include: { plan: true }
           });
 
-          if (subscription) {
-            // Update with Stripe subscription ID
-            subscription = await prisma.subscription.update({
-              where: { id: subscription.id },
-              data: {
-                stripeSubscriptionId,
-                status: 'ACTIVE',
-                currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
-                currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000)
-              },
-              include: { plan: true }
-            });
-          }
+          log.business('Subscription activated via metadata lookup', {
+            subscriptionId: subscription.id,
+            stripeSubscriptionId,
+            userId: subscription.userId,
+            lookupMethod: metadata.subscriptionId ? 'subscriptionId' : 'userId+role'
+          });
         }
       } else {
+        // Prepare update data with proper date handling
+        const updateData = {
+          status: 'ACTIVE'
+        };
+
+        // Only update period dates if they exist and are valid
+        if (stripeSubscription.current_period_start) {
+          updateData.currentPeriodStart = new Date(stripeSubscription.current_period_start * 1000);
+        }
+        if (stripeSubscription.current_period_end) {
+          updateData.currentPeriodEnd = new Date(stripeSubscription.current_period_end * 1000);
+        }
+
         // Update existing subscription
         subscription = await prisma.subscription.update({
           where: { stripeSubscriptionId },
-          data: {
-            status: 'ACTIVE',
-            currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
-            currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000)
-          },
+          data: updateData,
           include: { plan: true }
         });
-      }
 
-      if (subscription) {
-        log.business('Subscription activated', {
+        log.business('Subscription activated via direct lookup', {
           subscriptionId: subscription.id,
           stripeSubscriptionId,
           userId: subscription.userId
         });
-      } else {
+      }
+
+      if (!subscription) {
         log.error('Could not find subscription to activate', {
           stripeSubscriptionId,
           metadata: stripeSubscription.metadata
