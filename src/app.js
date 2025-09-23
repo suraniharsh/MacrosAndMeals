@@ -15,11 +15,20 @@ import billingRoutes from './routes/billing.js';
 const app = express();
 
 // Middleware
-app.use(express.json());
 app.use(cors());
 
 // Logging middleware (replaces morgan)
 app.use(requestLogger);
+
+// Stripe webhook needs raw body, so handle it before JSON parsing
+// This must come BEFORE express.json() to preserve raw body for signature verification
+app.use('/api/billing/webhook', express.raw({ 
+  type: 'application/json',
+  limit: '5mb' 
+}));
+
+// JSON parsing for all other routes
+app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);

@@ -6,7 +6,12 @@
 // - CUSTOMER has read-only diet/meal plan access
 
 import { authService } from '../services/authService.js';
+import { stripeService } from '../services/stripeService.js';
+import { subscriptionService } from '../services/subscriptionService.js';
 import { validateJWTConfig } from '../utils/jwt.js';
+import { PrismaClient } from '../generated/prisma/index.js';
+
+const prisma = new PrismaClient();
 
 // Validate JWT configuration on startup
 validateJWTConfig();
@@ -482,6 +487,185 @@ export const authController = {
         success: false,
         message: 'Trainer creation failed',
         error: 'TRAINER_CREATION_FAILED'
+      });
+    }
+  },
+
+  /**
+   * Register with plan selection (for self-signup)
+   */
+  registerWithPlan: async (req, res) => {
+    const logger = req.logger;
+    
+    try {
+      const { firstName, lastName, name, email, phoneNumber, password, role, planId, planType } = req.body;
+
+      // Handle different name formats
+      const fName = firstName || (name ? name.split(' ')[0] : '');
+      const lName = lastName || (name ? name.split(' ').slice(1).join(' ') || '' : '');
+
+      // Handle different plan formats
+      const selectedPlanId = planId || planType;
+
+      // Validate required fields
+      if (!fName || !email || !password || !role || !selectedPlanId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Required fields: name/firstName, email, password, role, planId/planType',
+          error: 'MISSING_FIELDS'
+        });
+      }
+
+      // Only allow ADMIN and TRAINER for self-signup with plans
+      if (!['ADMIN', 'TRAINER'].includes(role)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid role for plan registration',
+          error: 'INVALID_ROLE'
+        });
+      }
+
+      logger.auth('Registration with plan attempt', {
+        email,
+        role,
+        planId: selectedPlanId
+      });
+
+      // Get the selected plan (handle both planId and planType)
+      let plan;
+      if (selectedPlanId.length < 30) { // Likely a planType string
+        plan = await prisma.subscriptionPlan.findFirst({
+          where: { 
+            planType: selectedPlanId,
+            isActive: true
+          }
+        });
+      } else { // Likely a UUID planId
+        plan = await prisma.subscriptionPlan.findUnique({
+          where: { 
+            id: selectedPlanId,
+            isActive: true
+          }
+        });
+      }
+
+      if (!plan) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid or inactive subscription plan',
+          error: 'INVALID_PLAN'
+        });
+      }
+
+      // Register the user
+      const result = await authService.register({
+        firstName: fName,
+        lastName: lName,
+        email,
+        phoneNumber: phoneNumber || '',
+        password,
+        role
+      });
+
+      // Create Stripe customer
+      const stripeCustomer = await stripeService.createCustomer(
+        email,
+        `${fName} ${lName}`,
+        { userId: result.user.id, role }
+      );
+
+      // Create subscription
+      const subscription = await subscriptionService.createSubscription(
+        result.user.id,
+        role,
+        plan.id,
+        stripeCustomer.id
+      );
+
+      // If it's a free plan, return success
+      if (plan.planType === 'FREE') {
+        logger.auth('Free plan registration completed', {
+          userId: result.user.id,
+          email,
+          role
+        });
+
+        return res.status(201).json({
+          success: true,
+          message: 'User registered successfully with free plan',
+          data: {
+            user: result.user,
+            subscription: {
+              plan: plan.name,
+              maxCustomers: plan.maxCustomers,
+              status: 'ACTIVE'
+            },
+            accessToken: result.tokens.accessToken,
+            refreshToken: result.tokens.refreshToken,
+            accessTokenExpiresIn: result.tokens.accessTokenExpiresIn
+          }
+        });
+      }
+
+      // For paid plans, create checkout session
+      const checkoutSession = await stripeService.createCheckoutSession(
+        stripeCustomer.id,
+        plan.stripePriceId,
+        `${process.env.FRONTEND_URL}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        `${process.env.FRONTEND_URL}/payment-cancel`,
+        {
+          userId: result.user.id,
+          subscriptionId: subscription.id,
+          role
+        }
+      );
+
+      logger.auth('Paid plan registration initiated', {
+        userId: result.user.id,
+        email,
+        role,
+        planType: plan.planType,
+        checkoutSessionId: checkoutSession.id
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: 'User registered successfully. Complete payment to activate subscription.',
+        data: {
+          user: result.user,
+          subscription: {
+            plan: plan.name,
+            price: plan.price,
+            maxCustomers: plan.maxCustomers,
+            status: 'PENDING_PAYMENT'
+          },
+          checkoutUrl: checkoutSession.url,
+          accessToken: result.tokens.accessToken,
+          refreshToken: result.tokens.refreshToken,
+          accessTokenExpiresIn: result.tokens.accessTokenExpiresIn
+        }
+      });
+
+    } catch (error) {
+      logger.error('Registration with plan failed', {
+        email: req.body?.email,
+        role: req.body?.role,
+        planId: req.body?.planId,
+        error: error.message
+      });
+
+      if (error.message.includes('already exists')) {
+        return res.status(409).json({
+          success: false,
+          message: 'User with this email already exists',
+          error: 'USER_EXISTS'
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: 'Registration failed',
+        error: 'REGISTRATION_ERROR'
       });
     }
   }
