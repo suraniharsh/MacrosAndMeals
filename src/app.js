@@ -11,6 +11,7 @@ import trainerRoutes from './routes/trainers.js';
 import customerRoutes from './routes/customers.js';
 import mealPlanRoutes from './routes/mealplans.js';
 import billingRoutes from './routes/billing.js';
+import superAdminRoutes from './routes/superAdmin.js';
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use('/api/trainers', trainerRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/mealplans', mealPlanRoutes);
 app.use('/api/billing', billingRoutes);
+app.use('/api/super-admin', superAdminRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
