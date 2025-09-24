@@ -2932,5 +2932,453 @@ export const superAdminService = {
       log.error('Failed to get table stats', { error: error.message });
       return { error: error.message };
     }
+  },
+
+  // ==================== PLATFORM CONFIGURATION MANAGEMENT ====================
+
+  /**
+   * Get comprehensive platform configuration
+   */
+  async getPlatformConfiguration() {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      
+      // Get configuration from multiple sources
+      const [
+        environmentConfig,
+        databaseConfig,
+        securityConfig,
+        businessConfig,
+        integrationConfig,
+        featureFlags
+      ] = await Promise.all([
+        this._getEnvironmentConfig(),
+        this._getDatabaseConfig(),
+        this._getSecurityConfig(),
+        this._getBusinessConfig(),
+        this._getIntegrationConfig(),
+        this._getFeatureFlags()
+      ]);
+
+      return {
+        environment: environmentConfig,
+        database: databaseConfig,
+        security: securityConfig,
+        business: businessConfig,
+        integrations: integrationConfig,
+        featureFlags: featureFlags,
+        lastUpdated: new Date().toISOString(),
+        version: process.env.npm_package_version || '1.0.0'
+      };
+    } catch (error) {
+      log.error('Failed to get platform configuration', { error: error.message });
+      throw error;
+    }
+  },
+
+  /**
+   * Update platform configuration settings
+   */
+  async updatePlatformConfiguration(updates, updatedBy) {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      
+      const configFile = path.resolve(process.cwd(), 'platform-config.json');
+      
+      // Get current configuration
+      let currentConfig = {};
+      try {
+        const configContent = await fs.readFile(configFile, 'utf-8');
+        currentConfig = JSON.parse(configContent);
+      } catch (error) {
+        // File doesn't exist, create new config
+        currentConfig = { created: new Date().toISOString() };
+      }
+      
+      // Validate and apply updates
+      const validatedUpdates = await this._validateConfigurationUpdates(updates);
+      
+      // Merge updates with current configuration
+      const updatedConfig = {
+        ...currentConfig,
+        ...validatedUpdates,
+        lastUpdated: new Date().toISOString(),
+        updatedBy: updatedBy
+      };
+      
+      // Save to file
+      await fs.writeFile(configFile, JSON.stringify(updatedConfig, null, 2));
+      
+      // Log the configuration change
+      log.info('Platform configuration updated', {
+        updatedBy,
+        updates: Object.keys(validatedUpdates),
+        timestamp: new Date().toISOString()
+      });
+      
+      return {
+        success: true,
+        message: 'Platform configuration updated successfully',
+        updatedSettings: Object.keys(validatedUpdates),
+        timestamp: updatedConfig.lastUpdated
+      };
+    } catch (error) {
+      log.error('Failed to update platform configuration', { 
+        error: error.message, 
+        updatedBy 
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Manage feature flags
+   */
+  async manageFeatureFlags(action, flagData, managedBy) {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      
+      const flagsFile = path.resolve(process.cwd(), 'feature-flags.json');
+      
+      // Get current feature flags
+      let currentFlags = {};
+      try {
+        const flagsContent = await fs.readFile(flagsFile, 'utf-8');
+        currentFlags = JSON.parse(flagsContent);
+      } catch (error) {
+        currentFlags = { flags: {}, created: new Date().toISOString() };
+      }
+      
+      const { flagName, enabled, rolloutPercentage, targetRoles, description } = flagData;
+      
+      switch (action) {
+        case 'create':
+        case 'update':
+          if (!flagName) {
+            throw new Error('Flag name is required');
+          }
+          
+          currentFlags.flags[flagName] = {
+            enabled: enabled !== undefined ? enabled : false,
+            rolloutPercentage: rolloutPercentage || 0,
+            targetRoles: targetRoles || [],
+            description: description || '',
+            createdAt: currentFlags.flags[flagName]?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            updatedBy: managedBy
+          };
+          break;
+          
+        case 'delete':
+          if (!flagName || !currentFlags.flags[flagName]) {
+            throw new Error('Flag not found');
+          }
+          delete currentFlags.flags[flagName];
+          break;
+          
+        case 'toggle':
+          if (!flagName || !currentFlags.flags[flagName]) {
+            throw new Error('Flag not found');
+          }
+          currentFlags.flags[flagName].enabled = !currentFlags.flags[flagName].enabled;
+          currentFlags.flags[flagName].updatedAt = new Date().toISOString();
+          currentFlags.flags[flagName].updatedBy = managedBy;
+          break;
+          
+        default:
+          throw new Error('Invalid action. Use: create, update, delete, or toggle');
+      }
+      
+      currentFlags.lastUpdated = new Date().toISOString();
+      
+      // Save feature flags
+      await fs.writeFile(flagsFile, JSON.stringify(currentFlags, null, 2));
+      
+      log.info('Feature flag managed', {
+        action,
+        flagName,
+        managedBy,
+        timestamp: new Date().toISOString()
+      });
+      
+      return {
+        success: true,
+        message: `Feature flag '${flagName}' ${action}d successfully`,
+        flag: action === 'delete' ? null : currentFlags.flags[flagName],
+        allFlags: currentFlags.flags
+      };
+    } catch (error) {
+      log.error('Failed to manage feature flag', { 
+        error: error.message, 
+        action,
+        managedBy 
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Get third-party integrations status
+   */
+  async getIntegrations() {
+    try {
+      const integrationConfig = await this._getIntegrationConfig();
+      const healthChecks = await this._checkIntegrationsHealth();
+      
+      return {
+        integrations: integrationConfig,
+        health: healthChecks,
+        summary: {
+          total: Object.keys(integrationConfig).length,
+          active: Object.values(integrationConfig).filter(i => i.enabled).length,
+          healthy: Object.values(healthChecks).filter(h => h.status === 'healthy').length
+        },
+        lastChecked: new Date().toISOString()
+      };
+    } catch (error) {
+      log.error('Failed to get integrations', { error: error.message });
+      throw error;
+    }
+  },
+
+  // ==================== PRIVATE CONFIGURATION HELPERS ====================
+
+  /**
+   * Get environment configuration
+   */
+  _getEnvironmentConfig() {
+    return {
+      nodeEnv: process.env.NODE_ENV || 'development',
+      port: process.env.PORT || 3000,
+      nodeVersion: process.version,
+      platform: process.platform,
+      uptime: process.uptime()
+    };
+  },
+
+  /**
+   * Get database configuration (safe info only)
+   */
+  async _getDatabaseConfig() {
+    try {
+      const connectionInfo = await this._getDatabaseConnectionInfo();
+      return {
+        provider: 'mysql',
+        database: connectionInfo.database,
+        connectionStatus: connectionInfo.status,
+        pooling: 'enabled',
+        ssl: process.env.DATABASE_URL?.includes('sslmode') ? 'enabled' : 'disabled'
+      };
+    } catch (error) {
+      return {
+        provider: 'mysql',
+        connectionStatus: 'error',
+        error: error.message
+      };
+    }
+  },
+
+  /**
+   * Get security configuration (safe info only)
+   */
+  _getSecurityConfig() {
+    return {
+      jwtEnabled: !!process.env.JWT_SECRET,
+      refreshTokenEnabled: !!process.env.JWT_REFRESH_SECRET,
+      cors: {
+        enabled: true,
+        origin: process.env.CORS_ORIGIN || '*'
+      },
+      rateLimiting: {
+        enabled: false // Add if implemented
+      },
+      encryption: {
+        bcrypt: 'enabled',
+        saltRounds: 12
+      }
+    };
+  },
+
+  /**
+   * Get business configuration
+   */
+  async _getBusinessConfig() {
+    try {
+      const planCount = await prisma.subscriptionPlan.count();
+      
+      return {
+        subscriptionPlans: {
+          total: planCount,
+          types: ['FREE', 'BASIC', 'STANDARD', 'PREMIUM', 'CUSTOMER']
+        },
+        defaultPlan: 'FREE',
+        maxCustomersPerPlan: {
+          FREE: 2,
+          BASIC: 20,
+          STANDARD: 40,
+          PREMIUM: 60
+        },
+        businessRules: {
+          allowSelfSignup: true,
+          requireEmailVerification: false,
+          autoActivateSubscriptions: true
+        }
+      };
+    } catch (error) {
+      log.error('Failed to get business config', { error: error.message });
+      return { error: error.message };
+    }
+  },
+
+  /**
+   * Get integration configuration
+   */
+  _getIntegrationConfig() {
+    return {
+      stripe: {
+        enabled: !!process.env.STRIPE_SECRET_KEY,
+        mode: process.env.NODE_ENV === 'production' ? 'live' : 'test',
+        webhooksEnabled: !!process.env.STRIPE_WEBHOOK_SECRET,
+        features: ['payments', 'subscriptions', 'refunds']
+      },
+      email: {
+        enabled: false, // Add when email service is implemented
+        provider: 'none'
+      },
+      logging: {
+        enabled: true,
+        provider: 'winston',
+        levels: ['error', 'warn', 'info', 'debug']
+      },
+      monitoring: {
+        enabled: false // Add when monitoring service is implemented
+      }
+    };
+  },
+
+  /**
+   * Get feature flags
+   */
+  async _getFeatureFlags() {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      
+      const flagsFile = path.resolve(process.cwd(), 'feature-flags.json');
+      
+      try {
+        const flagsContent = await fs.readFile(flagsFile, 'utf-8');
+        const flagsData = JSON.parse(flagsContent);
+        return flagsData.flags || {};
+      } catch (error) {
+        // No feature flags file exists, return defaults
+        return {
+          advancedAnalytics: {
+            enabled: false,
+            rolloutPercentage: 0,
+            targetRoles: ['SUPER_ADMIN'],
+            description: 'Advanced analytics dashboard'
+          },
+          betaFeatures: {
+            enabled: false,
+            rolloutPercentage: 0,
+            targetRoles: ['SUPER_ADMIN'],
+            description: 'Beta features access'
+          }
+        };
+      }
+    } catch (error) {
+      log.error('Failed to get feature flags', { error: error.message });
+      return {};
+    }
+  },
+
+  /**
+   * Validate configuration updates
+   */
+  async _validateConfigurationUpdates(updates) {
+    const validatedUpdates = {};
+    
+    // Validate business configuration updates
+    if (updates.business) {
+      if (updates.business.defaultPlan) {
+        const validPlans = ['FREE', 'BASIC', 'STANDARD', 'PREMIUM', 'CUSTOMER'];
+        if (validPlans.includes(updates.business.defaultPlan)) {
+          validatedUpdates.business = { 
+            ...validatedUpdates.business, 
+            defaultPlan: updates.business.defaultPlan 
+          };
+        }
+      }
+      
+      if (updates.business.businessRules) {
+        validatedUpdates.business = {
+          ...validatedUpdates.business,
+          businessRules: {
+            allowSelfSignup: typeof updates.business.businessRules.allowSelfSignup === 'boolean' 
+              ? updates.business.businessRules.allowSelfSignup 
+              : true,
+            requireEmailVerification: typeof updates.business.businessRules.requireEmailVerification === 'boolean'
+              ? updates.business.businessRules.requireEmailVerification
+              : false,
+            autoActivateSubscriptions: typeof updates.business.businessRules.autoActivateSubscriptions === 'boolean'
+              ? updates.business.businessRules.autoActivateSubscriptions
+              : true
+          }
+        };
+      }
+    }
+    
+    // Validate security configuration updates
+    if (updates.security) {
+      if (updates.security.cors && updates.security.cors.origin) {
+        validatedUpdates.security = {
+          ...validatedUpdates.security,
+          cors: { origin: updates.security.cors.origin }
+        };
+      }
+    }
+    
+    return validatedUpdates;
+  },
+
+  /**
+   * Check integrations health
+   */
+  async _checkIntegrationsHealth() {
+    const health = {};
+    
+    // Check Stripe health
+    try {
+      if (process.env.STRIPE_SECRET_KEY) {
+        await stripe.accounts.retrieve();
+        health.stripe = { status: 'healthy', lastChecked: new Date().toISOString() };
+      } else {
+        health.stripe = { status: 'not_configured' };
+      }
+    } catch (error) {
+      health.stripe = { 
+        status: 'unhealthy', 
+        error: error.message,
+        lastChecked: new Date().toISOString()
+      };
+    }
+    
+    // Check database health
+    try {
+      await prisma.$queryRaw`SELECT 1 as test`;
+      health.database = { status: 'healthy', lastChecked: new Date().toISOString() };
+    } catch (error) {
+      health.database = { 
+        status: 'unhealthy', 
+        error: error.message,
+        lastChecked: new Date().toISOString()
+      };
+    }
+    
+    return health;
   }
 };

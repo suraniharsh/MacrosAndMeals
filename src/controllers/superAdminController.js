@@ -1317,5 +1317,193 @@ export const superAdminController = {
         error: 'MAINTENANCE_MODE_ERROR'
       });
     }
+  },
+
+  // ==================== PLATFORM CONFIGURATION MANAGEMENT ====================
+
+  /**
+   * Get comprehensive platform configuration
+   * GET /api/super-admin/config
+   */
+  getPlatformConfiguration: async (req, res) => {
+    const logger = req.logger;
+    
+    try {
+      logger.business('Super Admin accessing platform configuration', {
+        userId: req.user.id
+      });
+
+      const config = await superAdminService.getPlatformConfiguration();
+
+      return res.json({
+        success: true,
+        message: 'Platform configuration retrieved successfully',
+        data: config
+      });
+
+    } catch (error) {
+      logger.error('Failed to get platform configuration', {
+        userId: req.user.id,
+        error: error.message
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve platform configuration',
+        error: 'CONFIG_RETRIEVAL_ERROR'
+      });
+    }
+  },
+
+  /**
+   * Update platform configuration settings
+   * PUT /api/super-admin/config
+   */
+  updatePlatformConfiguration: async (req, res) => {
+    const logger = req.logger;
+    
+    try {
+      const updates = req.body;
+
+      if (!updates || Object.keys(updates).length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Configuration updates are required',
+          error: 'MISSING_UPDATES'
+        });
+      }
+
+      logger.business('Super Admin updating platform configuration', {
+        userId: req.user.id,
+        updates: Object.keys(updates)
+      });
+
+      const result = await superAdminService.updatePlatformConfiguration(
+        updates, 
+        req.user.id
+      );
+
+      return res.json({
+        success: true,
+        message: result.message,
+        data: result
+      });
+
+    } catch (error) {
+      logger.error('Failed to update platform configuration', {
+        userId: req.user.id,
+        error: error.message
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update platform configuration',
+        error: 'CONFIG_UPDATE_ERROR'
+      });
+    }
+  },
+
+  /**
+   * Manage feature flags
+   * POST /api/super-admin/config/feature-flags
+   */
+  manageFeatureFlags: async (req, res) => {
+    const logger = req.logger;
+    
+    try {
+      const { action, flagName, enabled, rolloutPercentage, targetRoles, description } = req.body;
+
+      if (!action) {
+        return res.status(400).json({
+          success: false,
+          message: 'Action is required (create, update, delete, toggle)',
+          error: 'MISSING_ACTION'
+        });
+      }
+
+      logger.business('Super Admin managing feature flag', {
+        userId: req.user.id,
+        action,
+        flagName
+      });
+
+      const result = await superAdminService.manageFeatureFlags(
+        action,
+        { flagName, enabled, rolloutPercentage, targetRoles, description },
+        req.user.id
+      );
+
+      return res.json({
+        success: true,
+        message: result.message,
+        data: {
+          flag: result.flag,
+          allFlags: result.allFlags
+        }
+      });
+
+    } catch (error) {
+      logger.error('Failed to manage feature flag', {
+        userId: req.user.id,
+        error: error.message
+      });
+
+      // Handle specific errors
+      if (error.message.includes('not found')) {
+        return res.status(404).json({
+          success: false,
+          message: error.message,
+          error: 'FLAG_NOT_FOUND'
+        });
+      }
+
+      if (error.message.includes('required') || error.message.includes('Invalid action')) {
+        return res.status(400).json({
+          success: false,
+          message: error.message,
+          error: 'INVALID_INPUT'
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to manage feature flag',
+        error: 'FEATURE_FLAG_ERROR'
+      });
+    }
+  },
+
+  /**
+   * Get third-party integrations status
+   * GET /api/super-admin/config/integrations
+   */
+  getIntegrations: async (req, res) => {
+    const logger = req.logger;
+    
+    try {
+      logger.business('Super Admin accessing integrations', {
+        userId: req.user.id
+      });
+
+      const integrations = await superAdminService.getIntegrations();
+
+      return res.json({
+        success: true,
+        message: 'Integrations retrieved successfully',
+        data: integrations
+      });
+
+    } catch (error) {
+      logger.error('Failed to get integrations', {
+        userId: req.user.id,
+        error: error.message
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve integrations',
+        error: 'INTEGRATIONS_ERROR'
+      });
+    }
   }
 };

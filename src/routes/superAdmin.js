@@ -62,4 +62,18 @@ router.get('/system/database', superAdminController.getDatabaseHealth);
 // Toggle maintenance mode
 router.post('/system/maintenance', superAdminController.toggleMaintenanceMode);
 
+// ==================== PLATFORM CONFIGURATION MANAGEMENT ====================
+
+// Get comprehensive platform configuration
+router.get('/config', superAdminController.getPlatformConfiguration);
+
+// Update platform configuration settings
+router.put('/config', superAdminController.updatePlatformConfiguration);
+
+// Manage feature flags
+router.post('/config/feature-flags', superAdminController.manageFeatureFlags);
+
+// Get third-party integrations status
+router.get('/config/integrations', superAdminController.getIntegrations);
+
 export default router;
