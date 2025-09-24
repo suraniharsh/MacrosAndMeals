@@ -2943,7 +2943,7 @@ export const superAdminService = {
     try {
       const fs = await import('fs/promises');
       const path = await import('path');
-      
+
       // Get configuration from multiple sources
       const [
         environmentConfig,
@@ -2984,9 +2984,9 @@ export const superAdminService = {
     try {
       const fs = await import('fs/promises');
       const path = await import('path');
-      
+
       const configFile = path.resolve(process.cwd(), 'platform-config.json');
-      
+
       // Get current configuration
       let currentConfig = {};
       try {
@@ -2996,10 +2996,10 @@ export const superAdminService = {
         // File doesn't exist, create new config
         currentConfig = { created: new Date().toISOString() };
       }
-      
+
       // Validate and apply updates
       const validatedUpdates = await this._validateConfigurationUpdates(updates);
-      
+
       // Merge updates with current configuration
       const updatedConfig = {
         ...currentConfig,
@@ -3007,17 +3007,17 @@ export const superAdminService = {
         lastUpdated: new Date().toISOString(),
         updatedBy: updatedBy
       };
-      
+
       // Save to file
       await fs.writeFile(configFile, JSON.stringify(updatedConfig, null, 2));
-      
+
       // Log the configuration change
       log.info('Platform configuration updated', {
         updatedBy,
         updates: Object.keys(validatedUpdates),
         timestamp: new Date().toISOString()
       });
-      
+
       return {
         success: true,
         message: 'Platform configuration updated successfully',
@@ -3025,9 +3025,9 @@ export const superAdminService = {
         timestamp: updatedConfig.lastUpdated
       };
     } catch (error) {
-      log.error('Failed to update platform configuration', { 
-        error: error.message, 
-        updatedBy 
+      log.error('Failed to update platform configuration', {
+        error: error.message,
+        updatedBy
       });
       throw error;
     }
@@ -3040,9 +3040,9 @@ export const superAdminService = {
     try {
       const fs = await import('fs/promises');
       const path = await import('path');
-      
+
       const flagsFile = path.resolve(process.cwd(), 'feature-flags.json');
-      
+
       // Get current feature flags
       let currentFlags = {};
       try {
@@ -3051,16 +3051,16 @@ export const superAdminService = {
       } catch (error) {
         currentFlags = { flags: {}, created: new Date().toISOString() };
       }
-      
+
       const { flagName, enabled, rolloutPercentage, targetRoles, description } = flagData;
-      
+
       switch (action) {
         case 'create':
         case 'update':
           if (!flagName) {
             throw new Error('Flag name is required');
           }
-          
+
           currentFlags.flags[flagName] = {
             enabled: enabled !== undefined ? enabled : false,
             rolloutPercentage: rolloutPercentage || 0,
@@ -3071,14 +3071,14 @@ export const superAdminService = {
             updatedBy: managedBy
           };
           break;
-          
+
         case 'delete':
           if (!flagName || !currentFlags.flags[flagName]) {
             throw new Error('Flag not found');
           }
           delete currentFlags.flags[flagName];
           break;
-          
+
         case 'toggle':
           if (!flagName || !currentFlags.flags[flagName]) {
             throw new Error('Flag not found');
@@ -3087,23 +3087,23 @@ export const superAdminService = {
           currentFlags.flags[flagName].updatedAt = new Date().toISOString();
           currentFlags.flags[flagName].updatedBy = managedBy;
           break;
-          
+
         default:
           throw new Error('Invalid action. Use: create, update, delete, or toggle');
       }
-      
+
       currentFlags.lastUpdated = new Date().toISOString();
-      
+
       // Save feature flags
       await fs.writeFile(flagsFile, JSON.stringify(currentFlags, null, 2));
-      
+
       log.info('Feature flag managed', {
         action,
         flagName,
         managedBy,
         timestamp: new Date().toISOString()
       });
-      
+
       return {
         success: true,
         message: `Feature flag '${flagName}' ${action}d successfully`,
@@ -3111,10 +3111,10 @@ export const superAdminService = {
         allFlags: currentFlags.flags
       };
     } catch (error) {
-      log.error('Failed to manage feature flag', { 
-        error: error.message, 
+      log.error('Failed to manage feature flag', {
+        error: error.message,
         action,
-        managedBy 
+        managedBy
       });
       throw error;
     }
@@ -3127,7 +3127,7 @@ export const superAdminService = {
     try {
       const integrationConfig = await this._getIntegrationConfig();
       const healthChecks = await this._checkIntegrationsHealth();
-      
+
       return {
         integrations: integrationConfig,
         health: healthChecks,
@@ -3208,7 +3208,7 @@ export const superAdminService = {
   async _getBusinessConfig() {
     try {
       const planCount = await prisma.subscriptionPlan.count();
-      
+
       return {
         subscriptionPlans: {
           total: planCount,
@@ -3266,9 +3266,9 @@ export const superAdminService = {
     try {
       const fs = await import('fs/promises');
       const path = await import('path');
-      
+
       const flagsFile = path.resolve(process.cwd(), 'feature-flags.json');
-      
+
       try {
         const flagsContent = await fs.readFile(flagsFile, 'utf-8');
         const flagsData = JSON.parse(flagsContent);
@@ -3301,25 +3301,25 @@ export const superAdminService = {
    */
   async _validateConfigurationUpdates(updates) {
     const validatedUpdates = {};
-    
+
     // Validate business configuration updates
     if (updates.business) {
       if (updates.business.defaultPlan) {
         const validPlans = ['FREE', 'BASIC', 'STANDARD', 'PREMIUM', 'CUSTOMER'];
         if (validPlans.includes(updates.business.defaultPlan)) {
-          validatedUpdates.business = { 
-            ...validatedUpdates.business, 
-            defaultPlan: updates.business.defaultPlan 
+          validatedUpdates.business = {
+            ...validatedUpdates.business,
+            defaultPlan: updates.business.defaultPlan
           };
         }
       }
-      
+
       if (updates.business.businessRules) {
         validatedUpdates.business = {
           ...validatedUpdates.business,
           businessRules: {
-            allowSelfSignup: typeof updates.business.businessRules.allowSelfSignup === 'boolean' 
-              ? updates.business.businessRules.allowSelfSignup 
+            allowSelfSignup: typeof updates.business.businessRules.allowSelfSignup === 'boolean'
+              ? updates.business.businessRules.allowSelfSignup
               : true,
             requireEmailVerification: typeof updates.business.businessRules.requireEmailVerification === 'boolean'
               ? updates.business.businessRules.requireEmailVerification
@@ -3331,7 +3331,7 @@ export const superAdminService = {
         };
       }
     }
-    
+
     // Validate security configuration updates
     if (updates.security) {
       if (updates.security.cors && updates.security.cors.origin) {
@@ -3341,7 +3341,7 @@ export const superAdminService = {
         };
       }
     }
-    
+
     return validatedUpdates;
   },
 
@@ -3350,7 +3350,7 @@ export const superAdminService = {
    */
   async _checkIntegrationsHealth() {
     const health = {};
-    
+
     // Check Stripe health
     try {
       if (process.env.STRIPE_SECRET_KEY) {
@@ -3360,25 +3360,25 @@ export const superAdminService = {
         health.stripe = { status: 'not_configured' };
       }
     } catch (error) {
-      health.stripe = { 
-        status: 'unhealthy', 
+      health.stripe = {
+        status: 'unhealthy',
         error: error.message,
         lastChecked: new Date().toISOString()
       };
     }
-    
+
     // Check database health
     try {
       await prisma.$queryRaw`SELECT 1 as test`;
       health.database = { status: 'healthy', lastChecked: new Date().toISOString() };
     } catch (error) {
-      health.database = { 
-        status: 'unhealthy', 
+      health.database = {
+        status: 'unhealthy',
         error: error.message,
         lastChecked: new Date().toISOString()
       };
     }
-    
+
     return health;
   }
 };

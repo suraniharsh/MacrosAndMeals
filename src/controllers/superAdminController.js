@@ -1327,7 +1327,7 @@ export const superAdminController = {
    */
   getPlatformConfiguration: async (req, res) => {
     const logger = req.logger;
-    
+
     try {
       logger.business('Super Admin accessing platform configuration', {
         userId: req.user.id
@@ -1361,7 +1361,7 @@ export const superAdminController = {
    */
   updatePlatformConfiguration: async (req, res) => {
     const logger = req.logger;
-    
+
     try {
       const updates = req.body;
 
@@ -1379,7 +1379,7 @@ export const superAdminController = {
       });
 
       const result = await superAdminService.updatePlatformConfiguration(
-        updates, 
+        updates,
         req.user.id
       );
 
@@ -1409,7 +1409,7 @@ export const superAdminController = {
    */
   manageFeatureFlags: async (req, res) => {
     const logger = req.logger;
-    
+
     try {
       const { action, flagName, enabled, rolloutPercentage, targetRoles, description } = req.body;
 
@@ -1479,7 +1479,7 @@ export const superAdminController = {
    */
   getIntegrations: async (req, res) => {
     const logger = req.logger;
-    
+
     try {
       logger.business('Super Admin accessing integrations', {
         userId: req.user.id
