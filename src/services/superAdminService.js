@@ -1,8 +1,10 @@
 import { PrismaClient } from '../generated/prisma/index.js';
 import { log } from '../utils/logger.js';
 import bcrypt from 'bcrypt';
+import Stripe from 'stripe';
 
 const prisma = new PrismaClient();
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export const superAdminService = {
   /**
@@ -1108,21 +1110,16 @@ export const superAdminService = {
 
           // Delete associated subscription and payments
           await prisma.$transaction(async (tx) => {
-            // Delete payments first
+            // Delete payments for subscriptions belonging to this admin
             await tx.payment.deleteMany({
               where: {
-                subscription: {
-                  OR: [
-                    { adminId: userId },
-                    { trainerId: null, customerId: null, adminId: userId }
-                  ]
-                }
+                subscription: { userId: userId }
               }
             });
 
-            // Delete subscription
+            // Delete subscription for this admin
             await tx.subscription.deleteMany({
-              where: { adminId: userId }
+              where: { userId: userId }
             });
 
             // Delete admin
@@ -1144,16 +1141,16 @@ export const superAdminService = {
 
           // Delete associated subscription and payments
           await prisma.$transaction(async (tx) => {
-            // Delete payments
+            // Delete payments for subscriptions belonging to this trainer
             await tx.payment.deleteMany({
               where: {
-                subscription: { trainerId: userId }
+                subscription: { userId: userId }
               }
             });
 
-            // Delete subscription
+            // Delete subscription for this trainer
             await tx.subscription.deleteMany({
-              where: { trainerId: userId }
+              where: { userId: userId }
             });
 
             // Delete trainer
@@ -1166,16 +1163,16 @@ export const superAdminService = {
         case 'CUSTOMER':
           // Delete customer and associated data
           await prisma.$transaction(async (tx) => {
-            // Delete payments
+            // Delete payments for subscriptions belonging to this customer
             await tx.payment.deleteMany({
               where: {
-                subscription: { customerId: userId }
+                subscription: { userId: userId }
               }
             });
 
-            // Delete subscription
+            // Delete subscription for this customer
             await tx.subscription.deleteMany({
-              where: { customerId: userId }
+              where: { userId: userId }
             });
 
             // Delete customer
@@ -1750,6 +1747,682 @@ export const superAdminService = {
       return results;
     } catch (error) {
       log.error('Failed to perform bulk operations', { error: error.message, performedBy });
+      throw error;
+    }
+  },
+
+  // ==================== SUBSCRIPTION ADMINISTRATION ====================
+
+  /**
+   * Get all subscriptions with comprehensive filtering and analytics
+   */
+  async getAllSubscriptions(filters = {}) {
+    try {
+      const {
+        status,
+        planType,
+        userRole,
+        search,
+        sortBy = 'createdAt',
+        sortOrder = 'desc',
+        page = 1,
+        limit = 20,
+        includeInactive = true
+      } = filters;
+
+      const offset = (page - 1) * limit;
+      const orderBy = { [sortBy]: sortOrder };
+
+      // Build where conditions
+      let whereConditions = [];
+
+      if (status) {
+        whereConditions.push({ status: status.toUpperCase() });
+      }
+
+      if (!includeInactive) {
+        whereConditions.push({ status: 'ACTIVE' });
+      }
+
+      if (planType) {
+        whereConditions.push({
+          plan: {
+            planType: planType.toUpperCase()
+          }
+        });
+      }
+
+      // User role filtering
+      if (userRole) {
+        whereConditions.push({
+          userType: userRole.toUpperCase()
+        });
+      }
+
+      const whereClause = whereConditions.length > 0 ? { AND: whereConditions } : {};
+
+      // Get subscriptions with full details
+      const [subscriptions, totalCount] = await Promise.all([
+        prisma.subscription.findMany({
+          where: whereClause,
+          include: {
+            plan: true,
+            payments: {
+              select: {
+                id: true,
+                amount: true,
+                status: true,
+                createdAt: true,
+                stripePaymentId: true
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 3
+            }
+          },
+          orderBy,
+          skip: offset,
+          take: limit
+        }),
+
+        prisma.subscription.count({ where: whereClause })
+      ]);
+
+      // Get user details for each subscription
+      const subscriptionsWithUsers = await Promise.all(
+        subscriptions.map(async (sub) => {
+          let user = null;
+
+          // Fetch user details based on userType
+          switch (sub.userType) {
+            case 'ADMIN':
+              user = await prisma.admin.findUnique({
+                where: { id: sub.userId },
+                select: {
+                  id: true,
+                  email: true,
+                  firstName: true,
+                  lastName: true,
+                  status: true
+                }
+              });
+              break;
+            case 'TRAINER':
+              user = await prisma.trainer.findUnique({
+                where: { id: sub.userId },
+                select: {
+                  id: true,
+                  email: true,
+                  firstName: true,
+                  lastName: true,
+                  status: true
+                }
+              });
+              break;
+            case 'CUSTOMER':
+              user = await prisma.customer.findUnique({
+                where: { id: sub.userId },
+                select: {
+                  id: true,
+                  email: true,
+                  firstName: true,
+                  lastName: true
+                }
+              });
+              break;
+          }
+
+          return { ...sub, userData: user };
+        })
+      );
+
+      // If search is provided, filter results
+      let filteredSubscriptions = subscriptionsWithUsers;
+      if (search) {
+        const searchLower = search.toLowerCase();
+        filteredSubscriptions = subscriptionsWithUsers.filter(sub => {
+          const user = sub.userData;
+          if (!user) return false;
+
+          return (
+            user.email?.toLowerCase().includes(searchLower) ||
+            user.firstName?.toLowerCase().includes(searchLower) ||
+            user.lastName?.toLowerCase().includes(searchLower) ||
+            sub.plan.name?.toLowerCase().includes(searchLower)
+          );
+        });
+      }
+
+      // Format the results
+      const formattedSubscriptions = filteredSubscriptions.map(sub => {
+        return {
+          id: sub.id,
+          status: sub.status,
+          plan: {
+            id: sub.plan.id,
+            name: sub.plan.name,
+            planType: sub.plan.planType,
+            price: sub.plan.price,
+            maxCustomers: sub.plan.maxCustomers
+          },
+          user: {
+            id: sub.userData?.id,
+            email: sub.userData?.email,
+            firstName: sub.userData?.firstName,
+            lastName: sub.userData?.lastName,
+            role: sub.userType,
+            status: sub.userData?.status || 'ACTIVE'
+          },
+          billing: {
+            stripeCustomerId: sub.stripeCustomerId,
+            stripeSubscriptionId: sub.stripeSubscriptionId,
+            currentPeriodStart: sub.currentPeriodStart,
+            currentPeriodEnd: sub.currentPeriodEnd,
+            cancelAtPeriodEnd: sub.cancelAtPeriodEnd
+          },
+          recentPayments: sub.payments,
+          createdAt: sub.createdAt,
+          updatedAt: sub.updatedAt
+        };
+      });
+
+      const totalPages = Math.ceil(totalCount / limit);
+
+      return {
+        subscriptions: formattedSubscriptions,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalSubscriptions: totalCount,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1
+        },
+        summary: {
+          total: totalCount,
+          active: subscriptions.filter(s => s.status === 'ACTIVE').length,
+          inactive: subscriptions.filter(s => s.status === 'INACTIVE').length,
+          cancelled: subscriptions.filter(s => s.cancelAtPeriodEnd).length
+        }
+      };
+    } catch (error) {
+      log.error('Failed to get all subscriptions', { error: error.message, filters });
+      throw error;
+    }
+  },
+
+  /**
+   * Modify subscription details (plan, status, billing)
+   */
+  async modifySubscription(subscriptionId, modifications, modifiedBy) {
+    try {
+      const { planId, status, customLimits, cancelAtPeriodEnd } = modifications;
+
+      // Get current subscription
+      const currentSubscription = await prisma.subscription.findUnique({
+        where: { id: subscriptionId },
+        include: {
+          plan: true
+        }
+      });
+
+      if (!currentSubscription) {
+        throw new Error('Subscription not found');
+      }
+
+      // Get user details based on userType
+      let user = null;
+      switch (currentSubscription.userType) {
+        case 'ADMIN':
+          user = await prisma.admin.findUnique({
+            where: { id: currentSubscription.userId },
+            select: { email: true, firstName: true, lastName: true }
+          });
+          break;
+        case 'TRAINER':
+          user = await prisma.trainer.findUnique({
+            where: { id: currentSubscription.userId },
+            select: { email: true, firstName: true, lastName: true }
+          });
+          break;
+        case 'CUSTOMER':
+          user = await prisma.customer.findUnique({
+            where: { id: currentSubscription.userId },
+            select: { email: true, firstName: true, lastName: true }
+          });
+          break;
+      }
+
+      let updateData = {
+        updatedAt: new Date()
+      };
+
+      // Handle plan change
+      if (planId && planId !== currentSubscription.planId) {
+        const newPlan = await prisma.subscriptionPlan.findUnique({
+          where: { id: planId }
+        });
+
+        if (!newPlan) {
+          throw new Error('New plan not found');
+        }
+
+        updateData.planId = planId;
+
+        // If there's a Stripe subscription, update it
+        if (currentSubscription.stripeSubscriptionId) {
+          try {
+            await stripe.subscriptions.update(currentSubscription.stripeSubscriptionId, {
+              items: [{
+                id: currentSubscription.stripeSubscriptionId,
+                price: newPlan.stripePriceId
+              }]
+            });
+          } catch (stripeError) {
+            log.warn('Failed to update Stripe subscription', {
+              stripeError: stripeError.message,
+              subscriptionId
+            });
+            // Continue with database update even if Stripe fails
+          }
+        }
+      }
+
+      // Handle status change
+      if (status && status !== currentSubscription.status) {
+        updateData.status = status.toUpperCase();
+      }
+
+      // Handle cancellation setting
+      if (typeof cancelAtPeriodEnd === 'boolean') {
+        updateData.cancelAtPeriodEnd = cancelAtPeriodEnd;
+
+        // Update Stripe subscription
+        if (currentSubscription.stripeSubscriptionId) {
+          try {
+            await stripe.subscriptions.update(currentSubscription.stripeSubscriptionId, {
+              cancel_at_period_end: cancelAtPeriodEnd
+            });
+          } catch (stripeError) {
+            log.warn('Failed to update Stripe cancellation', {
+              stripeError: stripeError.message,
+              subscriptionId
+            });
+          }
+        }
+      }
+
+      // Handle custom limits (stored as JSON)
+      if (customLimits) {
+        updateData.metadata = JSON.stringify({
+          ...((currentSubscription.metadata && typeof currentSubscription.metadata === 'string')
+            ? JSON.parse(currentSubscription.metadata)
+            : {}),
+          customLimits
+        });
+      }
+
+      // Update subscription
+      const updatedSubscription = await prisma.subscription.update({
+        where: { id: subscriptionId },
+        data: updateData,
+        include: {
+          plan: true,
+          admin: { select: { id: true, email: true, firstName: true, lastName: true } },
+          trainer: { select: { id: true, email: true, firstName: true, lastName: true } },
+          customer: { select: { id: true, email: true, firstName: true, lastName: true } }
+        }
+      });
+
+      // Log the modification
+      log.info('Subscription modified', {
+        modifiedBy,
+        subscriptionId,
+        userEmail: user?.email,
+        modifications: Object.keys(modifications),
+        oldPlan: currentSubscription.plan.name,
+        newPlan: updatedSubscription.plan.name
+      });
+
+      return {
+        subscription: updatedSubscription,
+        changes: modifications,
+        user: updatedSubscription.admin || updatedSubscription.trainer || updatedSubscription.customer
+      };
+    } catch (error) {
+      log.error('Failed to modify subscription', { error: error.message, subscriptionId, modifiedBy });
+      throw error;
+    }
+  },
+
+  /**
+   * Override subscription limits (for special cases)
+   */
+  async overrideSubscriptionLimits(subscriptionId, overrides, overriddenBy, reason) {
+    try {
+      const subscription = await prisma.subscription.findUnique({
+        where: { id: subscriptionId },
+        include: {
+          plan: true,
+          admin: { select: { email: true } },
+          trainer: { select: { email: true } },
+          customer: { select: { email: true } }
+        }
+      });
+
+      if (!subscription) {
+        throw new Error('Subscription not found');
+      }
+
+      const user = subscription.admin || subscription.trainer || subscription.customer;
+
+      // Prepare override metadata
+      const existingMetadata = subscription.metadata && typeof subscription.metadata === 'string'
+        ? JSON.parse(subscription.metadata)
+        : {};
+
+      const newMetadata = {
+        ...existingMetadata,
+        overrides: {
+          ...overrides,
+          appliedBy: overriddenBy,
+          appliedAt: new Date().toISOString(),
+          reason: reason || 'No reason provided',
+          originalLimits: {
+            maxCustomers: subscription.plan.maxCustomers
+          }
+        }
+      };
+
+      // Update subscription with overrides
+      const updatedSubscription = await prisma.subscription.update({
+        where: { id: subscriptionId },
+        data: {
+          metadata: JSON.stringify(newMetadata),
+          updatedAt: new Date()
+        },
+        include: {
+          plan: true,
+          admin: { select: { id: true, email: true, firstName: true, lastName: true } },
+          trainer: { select: { id: true, email: true, firstName: true, lastName: true } },
+          customer: { select: { id: true, email: true, firstName: true, lastName: true } }
+        }
+      });
+
+      // Log the override
+      log.info('Subscription limits overridden', {
+        overriddenBy,
+        subscriptionId,
+        userEmail: user?.email,
+        overrides,
+        reason
+      });
+
+      return {
+        subscription: updatedSubscription,
+        overrides: newMetadata.overrides,
+        effectiveLimits: {
+          maxCustomers: overrides.maxCustomers || subscription.plan.maxCustomers,
+          ...overrides
+        }
+      };
+    } catch (error) {
+      log.error('Failed to override subscription limits', {
+        error: error.message,
+        subscriptionId,
+        overriddenBy
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Get subscriptions with failed payments
+   */
+  async getFailedPaymentSubscriptions(filters = {}) {
+    try {
+      const { limit = 50, page = 1, daysBack = 30 } = filters;
+      const offset = (page - 1) * limit;
+      const cutoffDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
+
+      // Get subscriptions with recent failed payments
+      const subscriptionsWithFailures = await prisma.subscription.findMany({
+        where: {
+          payments: {
+            some: {
+              status: 'FAILED',
+              createdAt: { gte: cutoffDate }
+            }
+          }
+        },
+        include: {
+          plan: true,
+          payments: {
+            where: {
+              status: 'FAILED',
+              createdAt: { gte: cutoffDate }
+            },
+            orderBy: { createdAt: 'desc' }
+          }
+        },
+        skip: offset,
+        take: limit,
+        orderBy: { updatedAt: 'desc' }
+      });
+
+      // Get total count
+      const totalCount = await prisma.subscription.count({
+        where: {
+          payments: {
+            some: {
+              status: 'FAILED',
+              createdAt: { gte: cutoffDate }
+            }
+          }
+        }
+      });
+
+      // Get user details for each subscription and format results
+      const formattedResults = await Promise.all(
+        subscriptionsWithFailures.map(async (sub) => {
+          let user = null;
+
+          // Fetch user details based on userType
+          switch (sub.userType) {
+            case 'ADMIN':
+              user = await prisma.admin.findUnique({
+                where: { id: sub.userId },
+                select: { id: true, email: true, firstName: true, lastName: true, status: true }
+              });
+              break;
+            case 'TRAINER':
+              user = await prisma.trainer.findUnique({
+                where: { id: sub.userId },
+                select: { id: true, email: true, firstName: true, lastName: true, status: true }
+              });
+              break;
+            case 'CUSTOMER':
+              user = await prisma.customer.findUnique({
+                where: { id: sub.userId },
+                select: { id: true, email: true, firstName: true, lastName: true }
+              });
+              break;
+          }
+
+          return {
+            id: sub.id,
+            status: sub.status,
+            plan: {
+              name: sub.plan.name,
+              price: sub.plan.price,
+              planType: sub.plan.planType
+            },
+            user: {
+              id: user?.id,
+              email: user?.email,
+              firstName: user?.firstName,
+              lastName: user?.lastName,
+              role: sub.userType,
+              status: user?.status || 'ACTIVE'
+            },
+            billing: {
+              stripeCustomerId: sub.stripeCustomerId,
+              stripeSubscriptionId: sub.stripeSubscriptionId
+            },
+            failedPayments: sub.payments.map(payment => ({
+              id: payment.id,
+              amount: payment.amount,
+              createdAt: payment.createdAt,
+              stripePaymentId: payment.stripePaymentId,
+              failureReason: payment.failureReason || 'Unknown'
+            })),
+            totalFailedAmount: sub.payments.reduce((sum, p) => sum + p.amount, 0),
+            lastFailureDate: sub.payments[0]?.createdAt,
+            failureCount: sub.payments.length
+          };
+        })
+      );
+
+      return {
+        subscriptions: formattedResults,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(totalCount / limit),
+          totalSubscriptions: totalCount,
+          hasNextPage: page < Math.ceil(totalCount / limit),
+          hasPreviousPage: page > 1
+        },
+        summary: {
+          totalFailedSubscriptions: totalCount,
+          totalFailedAmount: formattedResults.reduce((sum, sub) => sum + sub.totalFailedAmount, 0),
+          averageFailuresPerSubscription: totalCount > 0
+            ? formattedResults.reduce((sum, sub) => sum + sub.failureCount, 0) / totalCount
+            : 0
+        }
+      };
+    } catch (error) {
+      log.error('Failed to get failed payment subscriptions', { error: error.message, filters });
+      throw error;
+    }
+  },
+
+  /**
+   * Process refund for subscription payment
+   */
+  async processSubscriptionRefund(subscriptionId, refundData, processedBy) {
+    try {
+      const { paymentId, amount, reason, refundType = 'partial' } = refundData;
+
+      // Get subscription and payment details
+      const subscription = await prisma.subscription.findUnique({
+        where: { id: subscriptionId },
+        include: {
+          plan: true,
+          admin: { select: { email: true } },
+          trainer: { select: { email: true } },
+          customer: { select: { email: true } },
+          payments: {
+            where: paymentId ? { id: paymentId } : { status: 'COMPLETED' },
+            orderBy: { createdAt: 'desc' },
+            take: 1
+          }
+        }
+      });
+
+      if (!subscription) {
+        throw new Error('Subscription not found');
+      }
+
+      if (!subscription.payments.length) {
+        throw new Error('No eligible payments found for refund');
+      }
+
+      const payment = subscription.payments[0];
+      const user = subscription.admin || subscription.trainer || subscription.customer;
+
+      if (!payment.stripePaymentId) {
+        throw new Error('No Stripe payment ID found for refund');
+      }
+
+      // Calculate refund amount
+      let refundAmount = amount;
+      if (!refundAmount) {
+        refundAmount = refundType === 'full' ? payment.amount : Math.floor(payment.amount / 2);
+      }
+
+      if (refundAmount > payment.amount) {
+        throw new Error('Refund amount cannot exceed payment amount');
+      }
+
+      // Process refund through Stripe
+      let stripeRefund;
+      try {
+        stripeRefund = await stripe.refunds.create({
+          payment_intent: payment.stripePaymentId,
+          amount: refundAmount,
+          reason: reason || 'requested_by_customer',
+          metadata: {
+            processedBy,
+            subscriptionId,
+            paymentId: payment.id
+          }
+        });
+      } catch (stripeError) {
+        log.error('Stripe refund failed', {
+          stripeError: stripeError.message,
+          paymentId: payment.stripePaymentId
+        });
+        throw new Error(`Stripe refund failed: ${stripeError.message}`);
+      }
+
+      // Update payment record with refund information
+      const updatedPayment = await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: refundAmount === payment.amount ? 'REFUNDED' : 'PARTIALLY_REFUNDED',
+          metadata: JSON.stringify({
+            ...(payment.metadata && typeof payment.metadata === 'string'
+              ? JSON.parse(payment.metadata)
+              : {}),
+            refund: {
+              stripeRefundId: stripeRefund.id,
+              refundAmount,
+              processedBy,
+              processedAt: new Date().toISOString(),
+              reason
+            }
+          }),
+          updatedAt: new Date()
+        }
+      });
+
+      // Log the refund
+      log.info('Subscription refund processed', {
+        processedBy,
+        subscriptionId,
+        paymentId: payment.id,
+        userEmail: user?.email,
+        refundAmount,
+        stripeRefundId: stripeRefund.id,
+        reason
+      });
+
+      return {
+        refund: {
+          id: stripeRefund.id,
+          amount: refundAmount,
+          originalAmount: payment.amount,
+          status: stripeRefund.status,
+          reason: reason || 'requested_by_customer'
+        },
+        payment: updatedPayment,
+        subscription,
+        user
+      };
+    } catch (error) {
+      log.error('Failed to process subscription refund', {
+        error: error.message,
+        subscriptionId,
+        processedBy
+      });
       throw error;
     }
   }

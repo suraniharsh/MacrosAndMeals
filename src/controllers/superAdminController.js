@@ -806,5 +806,313 @@ export const superAdminController = {
         error: 'BULK_OPERATION_ERROR'
       });
     }
+  },
+
+  // ==================== SUBSCRIPTION ADMINISTRATION ====================
+
+  /**
+   * Get all subscriptions with comprehensive filtering
+   * GET /api/super-admin/subscriptions
+   */
+  getAllSubscriptions: async (req, res) => {
+    const logger = req.logger;
+
+    try {
+      const {
+        status,
+        planType,
+        userRole,
+        search,
+        sortBy = 'createdAt',
+        sortOrder = 'desc',
+        page = 1,
+        limit = 20,
+        includeInactive = 'true'
+      } = req.query;
+
+      logger.business('Super Admin accessing all subscriptions', {
+        userId: req.user.id,
+        filters: { status, planType, userRole, search, page, limit }
+      });
+
+      const result = await superAdminService.getAllSubscriptions({
+        status,
+        planType,
+        userRole,
+        search,
+        sortBy,
+        sortOrder,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        includeInactive: includeInactive === 'true'
+      });
+
+      return res.json({
+        success: true,
+        message: 'Subscriptions retrieved successfully',
+        data: result.subscriptions,
+        pagination: result.pagination,
+        summary: result.summary
+      });
+
+    } catch (error) {
+      logger.error('Failed to get all subscriptions', {
+        userId: req.user.id,
+        error: error.message
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve subscriptions',
+        error: 'SUBSCRIPTIONS_FETCH_ERROR'
+      });
+    }
+  },
+
+  /**
+   * Modify subscription details
+   * PUT /api/super-admin/subscriptions/:id
+   */
+  modifySubscription: async (req, res) => {
+    const logger = req.logger;
+
+    try {
+      const { id } = req.params;
+      const modifications = req.body;
+
+      if (!modifications || Object.keys(modifications).length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No modifications provided',
+          error: 'MISSING_MODIFICATIONS'
+        });
+      }
+
+      logger.business('Super Admin modifying subscription', {
+        userId: req.user.id,
+        subscriptionId: id,
+        modifications: Object.keys(modifications)
+      });
+
+      const result = await superAdminService.modifySubscription(id, modifications, req.user.id);
+
+      return res.json({
+        success: true,
+        message: 'Subscription modified successfully',
+        data: result
+      });
+
+    } catch (error) {
+      logger.error('Failed to modify subscription', {
+        userId: req.user.id,
+        subscriptionId: req.params.id,
+        error: error.message
+      });
+
+      // Handle specific errors
+      if (error.message.includes('not found')) {
+        return res.status(404).json({
+          success: false,
+          message: 'Subscription not found',
+          error: 'SUBSCRIPTION_NOT_FOUND'
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to modify subscription',
+        error: 'SUBSCRIPTION_MODIFICATION_ERROR'
+      });
+    }
+  },
+
+  /**
+   * Override subscription limits
+   * POST /api/super-admin/subscriptions/:id/override
+   */
+  overrideSubscriptionLimits: async (req, res) => {
+    const logger = req.logger;
+
+    try {
+      const { id } = req.params;
+      const { overrides, reason } = req.body;
+
+      if (!overrides || typeof overrides !== 'object') {
+        return res.status(400).json({
+          success: false,
+          message: 'Overrides object is required',
+          error: 'MISSING_OVERRIDES'
+        });
+      }
+
+      logger.business('Super Admin overriding subscription limits', {
+        userId: req.user.id,
+        subscriptionId: id,
+        overrides: Object.keys(overrides),
+        reason
+      });
+
+      const result = await superAdminService.overrideSubscriptionLimits(
+        id,
+        overrides,
+        req.user.id,
+        reason
+      );
+
+      return res.json({
+        success: true,
+        message: 'Subscription limits overridden successfully',
+        data: result
+      });
+
+    } catch (error) {
+      logger.error('Failed to override subscription limits', {
+        userId: req.user.id,
+        subscriptionId: req.params.id,
+        error: error.message
+      });
+
+      // Handle specific errors
+      if (error.message.includes('not found')) {
+        return res.status(404).json({
+          success: false,
+          message: 'Subscription not found',
+          error: 'SUBSCRIPTION_NOT_FOUND'
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to override subscription limits',
+        error: 'SUBSCRIPTION_OVERRIDE_ERROR'
+      });
+    }
+  },
+
+  /**
+   * Get subscriptions with failed payments
+   * GET /api/super-admin/subscriptions/failed-payments
+   */
+  getFailedPaymentSubscriptions: async (req, res) => {
+    const logger = req.logger;
+
+    try {
+      const {
+        limit = 50,
+        page = 1,
+        daysBack = 30
+      } = req.query;
+
+      logger.business('Super Admin accessing failed payment subscriptions', {
+        userId: req.user.id,
+        filters: { limit, page, daysBack }
+      });
+
+      const result = await superAdminService.getFailedPaymentSubscriptions({
+        limit: parseInt(limit),
+        page: parseInt(page),
+        daysBack: parseInt(daysBack)
+      });
+
+      return res.json({
+        success: true,
+        message: 'Failed payment subscriptions retrieved successfully',
+        data: result.subscriptions,
+        pagination: result.pagination,
+        summary: result.summary
+      });
+
+    } catch (error) {
+      logger.error('Failed to get failed payment subscriptions', {
+        userId: req.user.id,
+        error: error.message
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve failed payment subscriptions',
+        error: 'FAILED_PAYMENTS_FETCH_ERROR'
+      });
+    }
+  },
+
+  /**
+   * Process subscription refund
+   * POST /api/super-admin/subscriptions/:id/refund
+   */
+  processSubscriptionRefund: async (req, res) => {
+    const logger = req.logger;
+
+    try {
+      const { id } = req.params;
+      const { paymentId, amount, reason, refundType } = req.body;
+
+      if (!reason) {
+        return res.status(400).json({
+          success: false,
+          message: 'Refund reason is required',
+          error: 'MISSING_REASON'
+        });
+      }
+
+      logger.business('Super Admin processing subscription refund', {
+        userId: req.user.id,
+        subscriptionId: id,
+        paymentId,
+        amount,
+        reason,
+        refundType
+      });
+
+      const result = await superAdminService.processSubscriptionRefund(
+        id,
+        { paymentId, amount, reason, refundType },
+        req.user.id
+      );
+
+      return res.json({
+        success: true,
+        message: 'Refund processed successfully',
+        data: result
+      });
+
+    } catch (error) {
+      logger.error('Failed to process subscription refund', {
+        userId: req.user.id,
+        subscriptionId: req.params.id,
+        error: error.message
+      });
+
+      // Handle specific errors
+      if (error.message.includes('not found')) {
+        return res.status(404).json({
+          success: false,
+          message: error.message,
+          error: 'SUBSCRIPTION_OR_PAYMENT_NOT_FOUND'
+        });
+      }
+
+      if (error.message.includes('Stripe')) {
+        return res.status(400).json({
+          success: false,
+          message: error.message,
+          error: 'STRIPE_REFUND_ERROR'
+        });
+      }
+
+      if (error.message.includes('exceed')) {
+        return res.status(400).json({
+          success: false,
+          message: error.message,
+          error: 'INVALID_REFUND_AMOUNT'
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to process refund',
+        error: 'REFUND_PROCESSING_ERROR'
+      });
+    }
   }
 };

@@ -28,4 +28,21 @@ router.post('/users/:id/impersonate', superAdminController.impersonateUser);
 router.get('/users/:id/activity', superAdminController.getUserActivity);
 router.post('/bulk-operations', superAdminController.performBulkOperations);
 
+// ==================== SUBSCRIPTION ADMINISTRATION ====================
+
+// Get all subscriptions with filtering and analytics
+router.get('/subscriptions', superAdminController.getAllSubscriptions);
+
+// Modify subscription details
+router.put('/subscriptions/:id', superAdminController.modifySubscription);
+
+// Override subscription limits
+router.post('/subscriptions/:id/override', superAdminController.overrideSubscriptionLimits);
+
+// Get subscriptions with failed payments
+router.get('/subscriptions/failed-payments', superAdminController.getFailedPaymentSubscriptions);
+
+// Process subscription refund
+router.post('/subscriptions/:id/refund', superAdminController.processSubscriptionRefund);
+
 export default router;
