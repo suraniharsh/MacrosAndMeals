@@ -50,9 +50,9 @@ export const superAdminService = {
           _sum: { amount: true },
           _count: { id: true }
         }),
-        
+
         prisma.payment.aggregate({
-          where: { 
+          where: {
             status: 'COMPLETED',
             createdAt: { gte: thirtyDaysAgo }
           },
@@ -60,7 +60,7 @@ export const superAdminService = {
         }),
 
         prisma.payment.aggregate({
-          where: { 
+          where: {
             status: 'COMPLETED',
             createdAt: { gte: sevenDaysAgo }
           },
@@ -148,11 +148,11 @@ export const superAdminService = {
       const newUsersThisWeek = newAdminsThisWeek + newTrainersThisWeek + newCustomersThisWeek;
 
       // Calculate growth rates
-      const userGrowthRate = newUsersThisMonth > 0 ? 
+      const userGrowthRate = newUsersThisMonth > 0 ?
         ((newUsersThisWeek / (newUsersThisMonth - newUsersThisWeek)) * 100).toFixed(2) : 0;
 
       // Revenue metrics
-      const averageRevenuePerUser = totalUsers > 0 ? 
+      const averageRevenuePerUser = totalUsers > 0 ?
         (totalRevenue._sum.amount || 0) / totalUsers : 0;
 
       const monthlyRecurringRevenue = monthlyRevenue._sum.amount || 0;
@@ -181,7 +181,7 @@ export const superAdminService = {
           userGrowthRate: parseFloat(userGrowthRate),
           breakdown: {
             newAdminsThisMonth,
-            newTrainersThisMonth, 
+            newTrainersThisMonth,
             newCustomersThisMonth,
             newAdminsThisWeek,
             newTrainersThisWeek,
@@ -192,7 +192,7 @@ export const superAdminService = {
           planDistribution,
           totalActive: activeSubscriptions,
           totalInactive: inactiveSubscriptions,
-          conversionRate: totalUsers > 0 ? 
+          conversionRate: totalUsers > 0 ?
             ((activeSubscriptions / totalUsers) * 100).toFixed(2) : 0
         },
         recentActivity: {
@@ -208,7 +208,7 @@ export const superAdminService = {
       };
 
     } catch (error) {
-      log.error('Failed to get platform statistics', { 
+      log.error('Failed to get platform statistics', {
         error: error.message,
         stack: error.stack
       });
@@ -227,7 +227,7 @@ export const superAdminService = {
       ] = await Promise.all([
         // Test database connectivity
         prisma.$queryRaw`SELECT 1 as health`,
-        
+
         // Count total active users across all roles
         Promise.all([
           prisma.superAdmin.count(),
@@ -253,8 +253,8 @@ export const superAdminService = {
       };
 
     } catch (error) {
-      log.error('Failed to get system health', { 
-        error: error.message 
+      log.error('Failed to get system health', {
+        error: error.message
       });
       throw new Error('Failed to retrieve system health');
     }
@@ -333,7 +333,7 @@ export const superAdminService = {
           _sum: { amount: true },
           _count: { _all: true }
         }),
-        
+
         // Previous period for growth calculation
         prisma.payment.aggregate({
           where: {
@@ -346,7 +346,7 @@ export const superAdminService = {
           _sum: { amount: true },
           _count: { _all: true }
         }),
-        
+
         // All time revenue
         prisma.payment.aggregate({
           where: { status: 'COMPLETED' },
@@ -357,7 +357,7 @@ export const superAdminService = {
 
       const currentRevenue = currentPeriod._sum.amount || 0;
       const previousRevenue = previousPeriod._sum.amount || 0;
-      const growthRate = previousRevenue > 0 ? 
+      const growthRate = previousRevenue > 0 ?
         (((currentRevenue - previousRevenue) / previousRevenue) * 100).toFixed(2) : 0;
 
       return {
@@ -422,7 +422,7 @@ export const superAdminService = {
       // Calculate MRR growth rate
       const lastMonthMRR = mrrTrend[mrrTrend.length - 2]?.revenue || 0;
       const thisMonthMRR = mrrTrend[mrrTrend.length - 1]?.revenue || 0;
-      const mrrGrowthRate = lastMonthMRR > 0 ? 
+      const mrrGrowthRate = lastMonthMRR > 0 ?
         (((thisMonthMRR - lastMonthMRR) / lastMonthMRR) * 100).toFixed(2) : 0;
 
       return {
@@ -430,7 +430,7 @@ export const superAdminService = {
         mrrGrowthRate: parseFloat(mrrGrowthRate),
         mrrTrend,
         activeSubscriptionCount: activeSubscriptions.length,
-        averageRevenuePerSubscription: activeSubscriptions.length > 0 ? 
+        averageRevenuePerSubscription: activeSubscriptions.length > 0 ?
           (currentMRR / activeSubscriptions.length).toFixed(2) : 0
       };
     } catch (error) {
@@ -487,7 +487,7 @@ export const superAdminService = {
       const planRevenueArray = Object.values(planRevenue).map(plan => ({
         ...plan,
         subscriberCount: plan.subscriberCount.size,
-        averageRevenuePerUser: plan.subscriberCount.size > 0 ? 
+        averageRevenuePerUser: plan.subscriberCount.size > 0 ?
           (plan.revenue / plan.subscriberCount.size).toFixed(2) : 0
       })).sort((a, b) => b.revenue - a.revenue);
 
@@ -537,13 +537,13 @@ export const superAdminService = {
         adminTrainerSegment: {
           revenue: adminTrainerRevenue._sum.amount || 0,
           transactionCount: adminTrainerRevenue._count._all || 0,
-          percentage: totalRevenue > 0 ? 
+          percentage: totalRevenue > 0 ?
             ((adminTrainerRevenue._sum.amount || 0) / totalRevenue * 100).toFixed(1) : 0
         },
         customerSegment: {
           revenue: customerRevenue._sum.amount || 0,
           transactionCount: customerRevenue._count._all || 0,
-          percentage: totalRevenue > 0 ? 
+          percentage: totalRevenue > 0 ?
             ((customerRevenue._sum.amount || 0) / totalRevenue * 100).toFixed(1) : 0
         },
         totalRevenue
@@ -569,7 +569,7 @@ export const superAdminService = {
 
         // Failed payment attempts
         prisma.payment.count({
-          where: { 
+          where: {
             status: 'FAILED',
             createdAt: { gte: last30Days }
           }
@@ -593,7 +593,7 @@ export const superAdminService = {
         })
       ]);
 
-      const failureRate = totalPayments > 0 ? 
+      const failureRate = totalPayments > 0 ?
         ((failedPayments / totalPayments) * 100).toFixed(2) : 0;
 
       // Group failures by reason (if available)
@@ -633,7 +633,7 @@ export const superAdminService = {
       const [recentWebhooks, recentPayments, webhookFailures] = await Promise.all([
         // Count recent webhook events (if you have webhook logs)
         Promise.resolve(0), // Placeholder - would need webhook log table
-        
+
         // Recent successful Stripe payments
         prisma.payment.count({
           where: {
@@ -664,6 +664,627 @@ export const superAdminService = {
         status: 'error',
         error: error.message
       };
+    }
+  },
+
+  // ==================== USER MANAGEMENT METHODS ====================
+
+  /**
+   * Get all users with filtering, pagination, and search
+   * @param {Object} filters - Filter options
+   * @param {string} currentUserId - Current Super Admin ID to exclude from results
+   */
+  async getAllUsers(filters = {}, currentUserId = null) {
+    try {
+      const {
+        role,
+        status,
+        search,
+        page = 1,
+        limit = 20,
+        sortBy = 'createdAt',
+        sortOrder = 'desc'
+      } = filters;
+
+      const offset = (page - 1) * limit;
+      const orderBy = { [sortBy]: sortOrder };
+
+      // Build base query conditions
+      let whereConditions = [];
+
+      // Role-based filtering
+      if (role) {
+        const roleCondition = { role: role.toUpperCase() };
+        whereConditions.push(roleCondition);
+      }
+
+      // Search across multiple fields
+      if (search) {
+        const searchConditions = [
+          { email: { contains: search, mode: 'insensitive' } },
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } }
+        ];
+        whereConditions.push({ OR: searchConditions });
+      }
+
+      // Status filtering (for admins and trainers)
+      if (status) {
+        whereConditions.push({ status: status.toUpperCase() });
+      }
+
+      const whereClause = whereConditions.length > 0 ? { AND: whereConditions } : {};
+
+      // Get users from all role tables
+      const [superAdmins, admins, trainers, customers] = await Promise.all([
+        // Super Admins (exclude current user)
+        prisma.superAdmin.findMany({
+          where: {
+            ...whereClause,
+            // Exclude current Super Admin from results
+            ...(currentUserId ? { id: { not: currentUserId } } : {}),
+            ...(role && role.toUpperCase() === 'SUPER_ADMIN' ? {} : role ? { id: null } : {})
+          },
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            createdAt: true,
+            updatedAt: true
+          },
+          orderBy,
+          skip: role === 'SUPER_ADMIN' ? offset : 0,
+          take: role === 'SUPER_ADMIN' ? limit : undefined
+        }),
+
+        // Admins
+        prisma.admin.findMany({
+          where: {
+            ...whereClause,
+            ...(role && role.toUpperCase() === 'ADMIN' ? {} : role ? { id: null } : {})
+          },
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+            superAdminId: true
+          },
+          orderBy,
+          skip: role === 'ADMIN' ? offset : 0,
+          take: role === 'ADMIN' ? limit : undefined
+        }),
+
+        // Trainers
+        prisma.trainer.findMany({
+          where: {
+            ...whereClause,
+            ...(role && role.toUpperCase() === 'TRAINER' ? {} : role ? { id: null } : {})
+          },
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+            adminId: true
+          },
+          orderBy,
+          skip: role === 'TRAINER' ? offset : 0,
+          take: role === 'TRAINER' ? limit : undefined
+        }),
+
+        // Customers
+        prisma.customer.findMany({
+          where: {
+            ...whereClause,
+            ...(role && role.toUpperCase() === 'CUSTOMER' ? {} : role ? { id: null } : {})
+          },
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            createdAt: true,
+            updatedAt: true,
+            trainerId: true
+          },
+          orderBy,
+          skip: role === 'CUSTOMER' ? offset : 0,
+          take: role === 'CUSTOMER' ? limit : undefined
+        })
+      ]);
+
+      // Combine and format results
+      let allUsers = [
+        ...superAdmins.map(user => ({ ...user, role: 'SUPER_ADMIN', status: 'ACTIVE' })),
+        ...admins.map(user => ({ ...user, role: 'ADMIN' })),
+        ...trainers.map(user => ({ ...user, role: 'TRAINER' })),
+        ...customers.map(user => ({ ...user, role: 'CUSTOMER', status: 'ACTIVE' }))
+      ];
+
+      // If no role filter, apply pagination to combined results
+      if (!role) {
+        allUsers = allUsers
+          .sort((a, b) => {
+            if (sortBy === 'createdAt') {
+              return sortOrder === 'desc'
+                ? new Date(b.createdAt) - new Date(a.createdAt)
+                : new Date(a.createdAt) - new Date(b.createdAt);
+            }
+            return 0;
+          })
+          .slice(offset, offset + limit);
+      }
+
+      // Get total count for pagination (exclude current user from Super Admin count)
+      const totalCounts = await Promise.all([
+        role === 'SUPER_ADMIN' || !role ? prisma.superAdmin.count({
+          where: {
+            ...whereClause,
+            ...(currentUserId ? { id: { not: currentUserId } } : {})
+          }
+        }) : Promise.resolve(0),
+        role === 'ADMIN' || !role ? prisma.admin.count({ where: whereClause }) : Promise.resolve(0),
+        role === 'TRAINER' || !role ? prisma.trainer.count({ where: whereClause }) : Promise.resolve(0),
+        role === 'CUSTOMER' || !role ? prisma.customer.count({ where: whereClause }) : Promise.resolve(0)
+      ]);
+
+      const totalUsers = totalCounts.reduce((sum, count) => sum + count, 0);
+      const totalPages = Math.ceil(totalUsers / limit);
+
+      return {
+        users: allUsers,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalUsers,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1
+        }
+      };
+    } catch (error) {
+      log.error('Failed to get all users', { error: error.message, filters });
+      throw error;
+    }
+  },
+
+  /**
+   * Get detailed user profile by ID and role
+   */
+  async getUserById(userId, userRole) {
+    try {
+      let user = null;
+      let additionalData = {};
+
+      switch (userRole.toUpperCase()) {
+        case 'SUPER_ADMIN':
+          user = await prisma.superAdmin.findUnique({
+            where: { id: userId },
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              createdAt: true,
+              updatedAt: true,
+              // Get managed admins
+              admins: {
+                select: {
+                  id: true,
+                  email: true,
+                  firstName: true,
+                  lastName: true,
+                  status: true
+                }
+              }
+            }
+          });
+          if (user) {
+            additionalData.role = 'SUPER_ADMIN';
+            additionalData.status = 'ACTIVE';
+            additionalData.managedAdmins = user.admins;
+            delete user.admins;
+          }
+          break;
+
+        case 'ADMIN':
+          user = await prisma.admin.findUnique({
+            where: { id: userId },
+            include: {
+              superAdmin: {
+                select: { id: true, email: true, firstName: true, lastName: true }
+              },
+              trainers: {
+                select: {
+                  id: true,
+                  email: true,
+                  firstName: true,
+                  lastName: true,
+                  status: true
+                }
+              },
+              subscription: {
+                include: {
+                  plan: true
+                }
+              }
+            }
+          });
+          if (user) {
+            additionalData.role = 'ADMIN';
+            additionalData.managedBy = user.superAdmin;
+            additionalData.managedTrainers = user.trainers;
+            additionalData.subscription = user.subscription;
+            delete user.superAdmin;
+            delete user.trainers;
+            delete user.subscription;
+          }
+          break;
+
+        case 'TRAINER':
+          user = await prisma.trainer.findUnique({
+            where: { id: userId },
+            include: {
+              admin: {
+                select: { id: true, email: true, firstName: true, lastName: true }
+              },
+              customers: {
+                select: {
+                  id: true,
+                  email: true,
+                  firstName: true,
+                  lastName: true
+                }
+              },
+              subscription: {
+                include: {
+                  plan: true
+                }
+              }
+            }
+          });
+          if (user) {
+            additionalData.role = 'TRAINER';
+            additionalData.managedBy = user.admin;
+            additionalData.managedCustomers = user.customers;
+            additionalData.subscription = user.subscription;
+            delete user.admin;
+            delete user.customers;
+            delete user.subscription;
+          }
+          break;
+
+        case 'CUSTOMER':
+          user = await prisma.customer.findUnique({
+            where: { id: userId },
+            include: {
+              trainer: {
+                select: { id: true, email: true, firstName: true, lastName: true }
+              },
+              subscription: {
+                include: {
+                  plan: true
+                }
+              }
+            }
+          });
+          if (user) {
+            additionalData.role = 'CUSTOMER';
+            additionalData.status = 'ACTIVE';
+            additionalData.assignedTrainer = user.trainer;
+            additionalData.subscription = user.subscription;
+            delete user.trainer;
+            delete user.subscription;
+          }
+          break;
+
+        default:
+          throw new Error(`Invalid user role: ${userRole}`);
+      }
+
+      if (!user) {
+        return null;
+      }
+
+      return { ...user, ...additionalData };
+    } catch (error) {
+      log.error('Failed to get user by ID', { error: error.message, userId, userRole });
+      throw error;
+    }
+  },
+
+  /**
+   * Update user profile
+   */
+  async updateUser(userId, userRole, updateData) {
+    try {
+      const { email, firstName, lastName, status, ...otherFields } = updateData;
+
+      let updatedUser = null;
+
+      switch (userRole.toUpperCase()) {
+        case 'SUPER_ADMIN':
+          updatedUser = await prisma.superAdmin.update({
+            where: { id: userId },
+            data: {
+              ...(email && { email }),
+              ...(firstName && { firstName }),
+              ...(lastName && { lastName }),
+              updatedAt: new Date()
+            }
+          });
+          break;
+
+        case 'ADMIN':
+          updatedUser = await prisma.admin.update({
+            where: { id: userId },
+            data: {
+              ...(email && { email }),
+              ...(firstName && { firstName }),
+              ...(lastName && { lastName }),
+              ...(status && { status: status.toUpperCase() }),
+              updatedAt: new Date()
+            }
+          });
+          break;
+
+        case 'TRAINER':
+          updatedUser = await prisma.trainer.update({
+            where: { id: userId },
+            data: {
+              ...(email && { email }),
+              ...(firstName && { firstName }),
+              ...(lastName && { lastName }),
+              ...(status && { status: status.toUpperCase() }),
+              updatedAt: new Date()
+            }
+          });
+          break;
+
+        case 'CUSTOMER':
+          updatedUser = await prisma.customer.update({
+            where: { id: userId },
+            data: {
+              ...(email && { email }),
+              ...(firstName && { firstName }),
+              ...(lastName && { lastName }),
+              updatedAt: new Date()
+            }
+          });
+          break;
+
+        default:
+          throw new Error(`Invalid user role: ${userRole}`);
+      }
+
+      log.info('User updated successfully', { userId, userRole, updatedFields: Object.keys(updateData) });
+      return updatedUser;
+    } catch (error) {
+      log.error('Failed to update user', { error: error.message, userId, userRole });
+      throw error;
+    }
+  },
+
+  /**
+   * Delete user with cascade
+   */
+  async deleteUser(userId, userRole) {
+    try {
+      let deletedUser = null;
+
+      switch (userRole.toUpperCase()) {
+        case 'SUPER_ADMIN':
+          // Cannot delete super admin if they manage other admins
+          const managedAdmins = await prisma.admin.count({
+            where: { superAdminId: userId }
+          });
+
+          if (managedAdmins > 0) {
+            throw new Error('Cannot delete Super Admin who manages other Admins. Please reassign or delete managed Admins first.');
+          }
+
+          deletedUser = await prisma.superAdmin.delete({
+            where: { id: userId }
+          });
+          break;
+
+        case 'ADMIN':
+          // Check for managed trainers
+          const managedTrainers = await prisma.trainer.count({
+            where: { adminId: userId }
+          });
+
+          if (managedTrainers > 0) {
+            throw new Error('Cannot delete Admin who manages Trainers. Please reassign or delete managed Trainers first.');
+          }
+
+          // Delete associated subscription and payments
+          await prisma.$transaction(async (tx) => {
+            // Delete payments first
+            await tx.payment.deleteMany({
+              where: {
+                subscription: {
+                  OR: [
+                    { adminId: userId },
+                    { trainerId: null, customerId: null, adminId: userId }
+                  ]
+                }
+              }
+            });
+
+            // Delete subscription
+            await tx.subscription.deleteMany({
+              where: { adminId: userId }
+            });
+
+            // Delete admin
+            deletedUser = await tx.admin.delete({
+              where: { id: userId }
+            });
+          });
+          break;
+
+        case 'TRAINER':
+          // Check for managed customers
+          const managedCustomers = await prisma.customer.count({
+            where: { trainerId: userId }
+          });
+
+          if (managedCustomers > 0) {
+            throw new Error('Cannot delete Trainer who manages Customers. Please reassign or delete managed Customers first.');
+          }
+
+          // Delete associated subscription and payments
+          await prisma.$transaction(async (tx) => {
+            // Delete payments
+            await tx.payment.deleteMany({
+              where: {
+                subscription: { trainerId: userId }
+              }
+            });
+
+            // Delete subscription
+            await tx.subscription.deleteMany({
+              where: { trainerId: userId }
+            });
+
+            // Delete trainer
+            deletedUser = await tx.trainer.delete({
+              where: { id: userId }
+            });
+          });
+          break;
+
+        case 'CUSTOMER':
+          // Delete customer and associated data
+          await prisma.$transaction(async (tx) => {
+            // Delete payments
+            await tx.payment.deleteMany({
+              where: {
+                subscription: { customerId: userId }
+              }
+            });
+
+            // Delete subscription
+            await tx.subscription.deleteMany({
+              where: { customerId: userId }
+            });
+
+            // Delete customer
+            deletedUser = await tx.customer.delete({
+              where: { id: userId }
+            });
+          });
+          break;
+
+        default:
+          throw new Error(`Invalid user role: ${userRole}`);
+      }
+
+      log.info('User deleted successfully', { userId, userRole });
+      return deletedUser;
+    } catch (error) {
+      log.error('Failed to delete user', { error: error.message, userId, userRole });
+      throw error;
+    }
+  },
+
+  /**
+   * Suspend user account
+   */
+  async suspendUser(userId, userRole) {
+    try {
+      let suspendedUser = null;
+
+      switch (userRole.toUpperCase()) {
+        case 'SUPER_ADMIN':
+          throw new Error('Cannot suspend Super Admin accounts');
+
+        case 'ADMIN':
+          suspendedUser = await prisma.admin.update({
+            where: { id: userId },
+            data: {
+              status: 'INACTIVE',
+              updatedAt: new Date()
+            }
+          });
+          break;
+
+        case 'TRAINER':
+          suspendedUser = await prisma.trainer.update({
+            where: { id: userId },
+            data: {
+              status: 'INACTIVE',
+              updatedAt: new Date()
+            }
+          });
+          break;
+
+        case 'CUSTOMER':
+          throw new Error('Customer accounts cannot be suspended directly. Use subscription management instead.');
+
+        default:
+          throw new Error(`Invalid user role: ${userRole}`);
+      }
+
+      log.info('User suspended successfully', { userId, userRole });
+      return suspendedUser;
+    } catch (error) {
+      log.error('Failed to suspend user', { error: error.message, userId, userRole });
+      throw error;
+    }
+  },
+
+  /**
+   * Activate user account
+   */
+  async activateUser(userId, userRole) {
+    try {
+      let activatedUser = null;
+
+      switch (userRole.toUpperCase()) {
+        case 'SUPER_ADMIN':
+          throw new Error('Super Admin accounts are always active');
+
+        case 'ADMIN':
+          activatedUser = await prisma.admin.update({
+            where: { id: userId },
+            data: {
+              status: 'ACTIVE',
+              updatedAt: new Date()
+            }
+          });
+          break;
+
+        case 'TRAINER':
+          activatedUser = await prisma.trainer.update({
+            where: { id: userId },
+            data: {
+              status: 'ACTIVE',
+              updatedAt: new Date()
+            }
+          });
+          break;
+
+        case 'CUSTOMER':
+          throw new Error('Customer accounts are always active. Use subscription management instead.');
+
+        default:
+          throw new Error(`Invalid user role: ${userRole}`);
+      }
+
+      log.info('User activated successfully', { userId, userRole });
+      return activatedUser;
+    } catch (error) {
+      log.error('Failed to activate user', { error: error.message, userId, userRole });
+      throw error;
     }
   }
 };
