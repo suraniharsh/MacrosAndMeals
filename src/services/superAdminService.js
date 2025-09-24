@@ -1,5 +1,6 @@
 import { PrismaClient } from '../generated/prisma/index.js';
 import { log } from '../utils/logger.js';
+import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
@@ -1284,6 +1285,471 @@ export const superAdminService = {
       return activatedUser;
     } catch (error) {
       log.error('Failed to activate user', { error: error.message, userId, userRole });
+      throw error;
+    }
+  },
+
+  // ==================== ADVANCED USER OPERATIONS ====================
+
+  /**
+   * Force password reset for any user
+   */
+  async resetUserPassword(userId, userRole, newPassword) {
+    try {
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      let updatedUser = null;
+
+      switch (userRole.toUpperCase()) {
+        case 'SUPER_ADMIN':
+          updatedUser = await prisma.superAdmin.update({
+            where: { id: userId },
+            data: {
+              password: hashedPassword,
+              updatedAt: new Date()
+            },
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              updatedAt: true
+            }
+          });
+          break;
+
+        case 'ADMIN':
+          updatedUser = await prisma.admin.update({
+            where: { id: userId },
+            data: {
+              password: hashedPassword,
+              updatedAt: new Date()
+            },
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              status: true,
+              updatedAt: true
+            }
+          });
+          break;
+
+        case 'TRAINER':
+          updatedUser = await prisma.trainer.update({
+            where: { id: userId },
+            data: {
+              password: hashedPassword,
+              updatedAt: new Date()
+            },
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              status: true,
+              updatedAt: true
+            }
+          });
+          break;
+
+        case 'CUSTOMER':
+          updatedUser = await prisma.customer.update({
+            where: { id: userId },
+            data: {
+              password: hashedPassword,
+              updatedAt: new Date()
+            },
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              updatedAt: true
+            }
+          });
+          break;
+
+        default:
+          throw new Error(`Invalid user role: ${userRole}`);
+      }
+
+      log.info('Password reset successfully', { userId, userRole });
+      return updatedUser;
+    } catch (error) {
+      log.error('Failed to reset password', { error: error.message, userId, userRole });
+      throw error;
+    }
+  },
+
+  /**
+   * Create impersonation token for user (with full audit trail)
+   */
+  async createImpersonationSession(impersonatorId, targetUserId, targetUserRole, reason = '') {
+    try {
+      // First, verify the target user exists and get their details
+      let targetUser = null;
+
+      switch (targetUserRole.toUpperCase()) {
+        case 'SUPER_ADMIN':
+          throw new Error('Cannot impersonate Super Admin accounts');
+
+        case 'ADMIN':
+          targetUser = await prisma.admin.findUnique({
+            where: { id: targetUserId },
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              status: true
+            }
+          });
+          break;
+
+        case 'TRAINER':
+          targetUser = await prisma.trainer.findUnique({
+            where: { id: targetUserId },
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              status: true
+            }
+          });
+          break;
+
+        case 'CUSTOMER':
+          targetUser = await prisma.customer.findUnique({
+            where: { id: targetUserId },
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true
+            }
+          });
+          break;
+
+        default:
+          throw new Error(`Invalid user role: ${targetUserRole}`);
+      }
+
+      if (!targetUser) {
+        throw new Error('Target user not found');
+      }
+
+      // Check if user is active (for roles that have status)
+      if (targetUser.status && targetUser.status !== 'ACTIVE') {
+        throw new Error('Cannot impersonate inactive user');
+      }
+
+      // Create audit log entry for impersonation
+      const auditLog = {
+        impersonatorId,
+        targetUserId,
+        targetUserRole: targetUserRole.toUpperCase(),
+        targetUserEmail: targetUser.email,
+        reason: reason || 'No reason provided',
+        sessionStarted: new Date(),
+        status: 'ACTIVE'
+      };
+
+      // For now, we'll just return the impersonation data
+      // In a full implementation, you might want to create an ImpersonationSession table
+      log.info('Impersonation session created', auditLog);
+
+      return {
+        impersonationToken: `imp_${targetUserId}_${Date.now()}`, // Simple token for demo
+        targetUser: {
+          ...targetUser,
+          role: targetUserRole.toUpperCase()
+        },
+        sessionData: auditLog,
+        expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000) // 2 hours
+      };
+    } catch (error) {
+      log.error('Failed to create impersonation session', {
+        error: error.message,
+        impersonatorId,
+        targetUserId,
+        targetUserRole
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Get user activity logs (placeholder - would require activity tracking table)
+   */
+  async getUserActivity(userId, userRole, filters = {}) {
+    try {
+      const { limit = 50, page = 1, startDate, endDate } = filters;
+      const offset = (page - 1) * limit;
+
+      // For now, we'll simulate activity logs using existing data
+      // In a real implementation, you'd have an ActivityLog table
+
+      let user = null;
+      let activities = [];
+
+      switch (userRole.toUpperCase()) {
+        case 'SUPER_ADMIN':
+          user = await prisma.superAdmin.findUnique({
+            where: { id: userId },
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              createdAt: true,
+              updatedAt: true
+            }
+          });
+          break;
+
+        case 'ADMIN':
+          user = await prisma.admin.findUnique({
+            where: { id: userId },
+            include: {
+              subscription: {
+                include: {
+                  payments: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 10
+                  }
+                }
+              }
+            }
+          });
+
+          if (user?.subscription?.payments) {
+            activities = user.subscription.payments.map(payment => ({
+              id: payment.id,
+              type: 'PAYMENT',
+              action: payment.status === 'COMPLETED' ? 'Payment Successful' : 'Payment Failed',
+              amount: payment.amount,
+              timestamp: payment.createdAt,
+              metadata: {
+                stripePaymentId: payment.stripePaymentId,
+                subscriptionId: payment.subscriptionId
+              }
+            }));
+          }
+          break;
+
+        case 'TRAINER':
+          user = await prisma.trainer.findUnique({
+            where: { id: userId },
+            include: {
+              subscription: {
+                include: {
+                  payments: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 10
+                  }
+                }
+              }
+            }
+          });
+
+          if (user?.subscription?.payments) {
+            activities = user.subscription.payments.map(payment => ({
+              id: payment.id,
+              type: 'PAYMENT',
+              action: payment.status === 'COMPLETED' ? 'Payment Successful' : 'Payment Failed',
+              amount: payment.amount,
+              timestamp: payment.createdAt,
+              metadata: {
+                stripePaymentId: payment.stripePaymentId,
+                subscriptionId: payment.subscriptionId
+              }
+            }));
+          }
+          break;
+
+        case 'CUSTOMER':
+          user = await prisma.customer.findUnique({
+            where: { id: userId },
+            include: {
+              subscription: {
+                include: {
+                  payments: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 10
+                  }
+                }
+              }
+            }
+          });
+
+          if (user?.subscription?.payments) {
+            activities = user.subscription.payments.map(payment => ({
+              id: payment.id,
+              type: 'PAYMENT',
+              action: payment.status === 'COMPLETED' ? 'Payment Successful' : 'Payment Failed',
+              amount: payment.amount,
+              timestamp: payment.createdAt,
+              metadata: {
+                stripePaymentId: payment.stripePaymentId,
+                subscriptionId: payment.subscriptionId
+              }
+            }));
+          }
+          break;
+
+        default:
+          throw new Error(`Invalid user role: ${userRole}`);
+      }
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Add account creation activity
+      activities.unshift({
+        id: `account_created_${user.id}`,
+        type: 'ACCOUNT',
+        action: 'Account Created',
+        timestamp: user.createdAt,
+        metadata: {
+          email: user.email,
+          role: userRole.toUpperCase()
+        }
+      });
+
+      // Add account update activities if different from creation
+      if (user.updatedAt.getTime() !== user.createdAt.getTime()) {
+        activities.unshift({
+          id: `account_updated_${user.id}`,
+          type: 'ACCOUNT',
+          action: 'Profile Updated',
+          timestamp: user.updatedAt,
+          metadata: {
+            email: user.email
+          }
+        });
+      }
+
+      // Filter by date range if provided
+      if (startDate || endDate) {
+        activities = activities.filter(activity => {
+          const activityDate = new Date(activity.timestamp);
+          if (startDate && activityDate < new Date(startDate)) return false;
+          if (endDate && activityDate > new Date(endDate)) return false;
+          return true;
+        });
+      }
+
+      // Apply pagination
+      const totalActivities = activities.length;
+      activities = activities.slice(offset, offset + limit);
+
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: userRole.toUpperCase()
+        },
+        activities,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(totalActivities / limit),
+          totalActivities,
+          hasNextPage: offset + limit < totalActivities,
+          hasPreviousPage: page > 1
+        }
+      };
+    } catch (error) {
+      log.error('Failed to get user activity', { error: error.message, userId, userRole });
+      throw error;
+    }
+  },
+
+  /**
+   * Perform bulk operations on multiple users
+   */
+  async performBulkUserOperations(operations, performedBy) {
+    try {
+      const results = {
+        successful: [],
+        failed: [],
+        summary: {
+          total: operations.length,
+          succeeded: 0,
+          failed: 0
+        }
+      };
+
+      for (const operation of operations) {
+        const { userId, userRole, action, data } = operation;
+
+        try {
+          let result = null;
+
+          switch (action.toUpperCase()) {
+            case 'SUSPEND':
+              result = await this.suspendUser(userId, userRole);
+              break;
+
+            case 'ACTIVATE':
+              result = await this.activateUser(userId, userRole);
+              break;
+
+            case 'UPDATE':
+              result = await this.updateUser(userId, userRole, data);
+              break;
+
+            case 'DELETE':
+              result = await this.deleteUser(userId, userRole);
+              break;
+
+            case 'RESET_PASSWORD':
+              if (!data?.newPassword) {
+                throw new Error('New password is required for password reset');
+              }
+              result = await this.resetUserPassword(userId, userRole, data.newPassword);
+              break;
+
+            default:
+              throw new Error(`Invalid bulk operation action: ${action}`);
+          }
+
+          results.successful.push({
+            userId,
+            userRole,
+            action,
+            result,
+            timestamp: new Date()
+          });
+          results.summary.succeeded++;
+
+        } catch (error) {
+          results.failed.push({
+            userId,
+            userRole,
+            action,
+            error: error.message,
+            timestamp: new Date()
+          });
+          results.summary.failed++;
+        }
+      }
+
+      // Log the bulk operation
+      log.info('Bulk user operation completed', {
+        performedBy,
+        total: results.summary.total,
+        succeeded: results.summary.succeeded,
+        failed: results.summary.failed
+      });
+
+      return results;
+    } catch (error) {
+      log.error('Failed to perform bulk operations', { error: error.message, performedBy });
       throw error;
     }
   }

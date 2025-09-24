@@ -22,4 +22,10 @@ router.delete('/users/:id', superAdminController.deleteUser);
 router.post('/users/:id/suspend', superAdminController.suspendUser);
 router.post('/users/:id/activate', superAdminController.activateUser);
 
+// Advanced User Operations Routes
+router.post('/users/:id/reset-password', superAdminController.resetUserPassword);
+router.post('/users/:id/impersonate', superAdminController.impersonateUser);
+router.get('/users/:id/activity', superAdminController.getUserActivity);
+router.post('/bulk-operations', superAdminController.performBulkOperations);
+
 export default router;

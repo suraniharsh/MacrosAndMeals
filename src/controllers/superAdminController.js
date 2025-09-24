@@ -526,5 +526,285 @@ export const superAdminController = {
         error: 'USER_ACTIVATION_ERROR'
       });
     }
+  },
+
+  // ==================== ADVANCED USER OPERATIONS ====================
+
+  /**
+   * Force password reset for any user
+   * POST /api/super-admin/users/:id/reset-password
+   */
+  resetUserPassword: async (req, res) => {
+    const logger = req.logger;
+
+    try {
+      const { id } = req.params;
+      const { role, newPassword } = req.body;
+
+      if (!role) {
+        return res.status(400).json({
+          success: false,
+          message: 'User role is required',
+          error: 'MISSING_ROLE'
+        });
+      }
+
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: 'New password is required and must be at least 6 characters',
+          error: 'INVALID_PASSWORD'
+        });
+      }
+
+      logger.business('Super Admin resetting user password', {
+        userId: req.user.id,
+        targetUserId: id,
+        targetUserRole: role
+      });
+
+      const updatedUser = await superAdminService.resetUserPassword(id, role, newPassword);
+
+      return res.json({
+        success: true,
+        message: 'Password reset successfully',
+        data: updatedUser
+      });
+
+    } catch (error) {
+      logger.error('Failed to reset user password', {
+        userId: req.user.id,
+        targetUserId: req.params.id,
+        error: error.message
+      });
+
+      // Handle specific errors
+      if (error.code === 'P2025') {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found',
+          error: 'USER_NOT_FOUND'
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to reset user password',
+        error: 'PASSWORD_RESET_ERROR'
+      });
+    }
+  },
+
+  /**
+   * Create impersonation session for user
+   * POST /api/super-admin/users/:id/impersonate
+   */
+  impersonateUser: async (req, res) => {
+    const logger = req.logger;
+
+    try {
+      const { id } = req.params;
+      const { role, reason } = req.body;
+
+      if (!role) {
+        return res.status(400).json({
+          success: false,
+          message: 'User role is required',
+          error: 'MISSING_ROLE'
+        });
+      }
+
+      logger.business('Super Admin creating impersonation session', {
+        userId: req.user.id,
+        targetUserId: id,
+        targetUserRole: role,
+        reason: reason || 'No reason provided'
+      });
+
+      const impersonationSession = await superAdminService.createImpersonationSession(
+        req.user.id,
+        id,
+        role,
+        reason
+      );
+
+      return res.json({
+        success: true,
+        message: 'Impersonation session created successfully',
+        data: impersonationSession
+      });
+
+    } catch (error) {
+      logger.error('Failed to create impersonation session', {
+        userId: req.user.id,
+        targetUserId: req.params.id,
+        error: error.message
+      });
+
+      // Handle specific errors
+      if (error.code === 'P2025' || error.message.includes('not found')) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found',
+          error: 'USER_NOT_FOUND'
+        });
+      }
+
+      if (error.message.includes('Cannot impersonate') || error.message.includes('inactive')) {
+        return res.status(400).json({
+          success: false,
+          message: error.message,
+          error: 'IMPERSONATION_NOT_ALLOWED'
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create impersonation session',
+        error: 'IMPERSONATION_ERROR'
+      });
+    }
+  },
+
+  /**
+   * Get user activity logs
+   * GET /api/super-admin/users/:id/activity
+   */
+  getUserActivity: async (req, res) => {
+    const logger = req.logger;
+
+    try {
+      const { id } = req.params;
+      const { role, limit = 50, page = 1, startDate, endDate } = req.query;
+
+      if (!role) {
+        return res.status(400).json({
+          success: false,
+          message: 'User role is required',
+          error: 'MISSING_ROLE'
+        });
+      }
+
+      logger.business('Super Admin accessing user activity', {
+        userId: req.user.id,
+        targetUserId: id,
+        targetUserRole: role
+      });
+
+      const activityData = await superAdminService.getUserActivity(id, role, {
+        limit: parseInt(limit),
+        page: parseInt(page),
+        startDate,
+        endDate
+      });
+
+      return res.json({
+        success: true,
+        message: 'User activity retrieved successfully',
+        data: activityData
+      });
+
+    } catch (error) {
+      logger.error('Failed to get user activity', {
+        userId: req.user.id,
+        targetUserId: req.params.id,
+        error: error.message
+      });
+
+      // Handle specific errors
+      if (error.code === 'P2025' || error.message.includes('not found')) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found',
+          error: 'USER_NOT_FOUND'
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve user activity',
+        error: 'ACTIVITY_FETCH_ERROR'
+      });
+    }
+  },
+
+  /**
+   * Perform bulk operations on multiple users
+   * POST /api/super-admin/bulk-operations
+   */
+  performBulkOperations: async (req, res) => {
+    const logger = req.logger;
+
+    try {
+      const { operations } = req.body;
+
+      if (!operations || !Array.isArray(operations) || operations.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Operations array is required and must not be empty',
+          error: 'MISSING_OPERATIONS'
+        });
+      }
+
+      // Validate operations format
+      const validActions = ['SUSPEND', 'ACTIVATE', 'UPDATE', 'DELETE', 'RESET_PASSWORD'];
+      const validRoles = ['SUPER_ADMIN', 'ADMIN', 'TRAINER', 'CUSTOMER'];
+
+      for (const [index, operation] of operations.entries()) {
+        if (!operation.userId || !operation.userRole || !operation.action) {
+          return res.status(400).json({
+            success: false,
+            message: `Operation at index ${index} is missing required fields (userId, userRole, action)`,
+            error: 'INVALID_OPERATION_FORMAT'
+          });
+        }
+
+        if (!validActions.includes(operation.action.toUpperCase())) {
+          return res.status(400).json({
+            success: false,
+            message: `Invalid action '${operation.action}' at index ${index}. Valid actions: ${validActions.join(', ')}`,
+            error: 'INVALID_ACTION'
+          });
+        }
+
+        if (!validRoles.includes(operation.userRole.toUpperCase())) {
+          return res.status(400).json({
+            success: false,
+            message: `Invalid role '${operation.userRole}' at index ${index}. Valid roles: ${validRoles.join(', ')}`,
+            error: 'INVALID_ROLE'
+          });
+        }
+      }
+
+      logger.business('Super Admin performing bulk operations', {
+        userId: req.user.id,
+        operationCount: operations.length,
+        operations: operations.map(op => ({
+          action: op.action,
+          targetRole: op.userRole,
+          targetId: op.userId
+        }))
+      });
+
+      const results = await superAdminService.performBulkUserOperations(operations, req.user.id);
+
+      return res.json({
+        success: true,
+        message: `Bulk operations completed. ${results.summary.succeeded} succeeded, ${results.summary.failed} failed.`,
+        data: results
+      });
+
+    } catch (error) {
+      logger.error('Failed to perform bulk operations', {
+        userId: req.user.id,
+        error: error.message
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to perform bulk operations',
+        error: 'BULK_OPERATION_ERROR'
+      });
+    }
   }
 };
