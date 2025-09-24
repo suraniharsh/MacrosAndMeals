@@ -1,4 +1,4 @@
-import { PrismaClient } from '../generated/prisma/index.js';
+import { PrismaClient, Prisma } from '../generated/prisma/index.js';
 import { log } from '../utils/logger.js';
 import bcrypt from 'bcrypt';
 import Stripe from 'stripe';
@@ -2424,6 +2424,513 @@ export const superAdminService = {
         processedBy
       });
       throw error;
+    }
+  },
+
+  // ==================== SYSTEM HEALTH & MONITORING ====================
+
+  /**
+   * Get comprehensive system health status
+   */
+  async getSystemHealth() {
+    try {
+      const startTime = Date.now();
+
+      // Test database connectivity
+      const dbHealth = await this._checkDatabaseHealth();
+
+      // Test Stripe connectivity
+      const stripeHealth = await this._checkStripeHealth();
+
+      // Get system metrics
+      const systemMetrics = this._getSystemMetrics();
+
+      // Check service dependencies
+      const dependencyHealth = await this._checkServiceDependencies();
+
+      const responseTime = Date.now() - startTime;
+
+      // Determine overall health status
+      const allHealthy = [
+        dbHealth.status,
+        stripeHealth.status,
+        dependencyHealth.status
+      ].every(status => status === 'healthy');
+
+      const overallStatus = allHealthy ? 'healthy' : 'degraded';
+
+      return {
+        status: overallStatus,
+        timestamp: new Date().toISOString(),
+        responseTime: `${responseTime}ms`,
+        services: {
+          database: dbHealth,
+          stripe: stripeHealth,
+          dependencies: dependencyHealth
+        },
+        system: systemMetrics,
+        uptime: process.uptime(),
+        environment: process.env.NODE_ENV || 'development'
+      };
+    } catch (error) {
+      log.error('Failed to get system health', { error: error.message });
+      return {
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        error: error.message,
+        services: {
+          database: { status: 'unknown' },
+          stripe: { status: 'unknown' },
+          dependencies: { status: 'unknown' }
+        }
+      };
+    }
+  },
+
+  /**
+   * Get system performance metrics
+   */
+  async getSystemMetrics() {
+    try {
+      // Get database metrics
+      const dbMetrics = await this._getDatabaseMetrics();
+
+      // Get application metrics
+      const appMetrics = this._getApplicationMetrics();
+
+      // Get business metrics
+      const businessMetrics = await this._getBusinessMetrics();
+
+      return {
+        database: dbMetrics,
+        application: appMetrics,
+        business: businessMetrics,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      log.error('Failed to get system metrics', { error: error.message });
+      throw error;
+    }
+  },
+
+  /**
+   * Get system logs with filtering
+   */
+  async getSystemLogs(filters = {}) {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+
+    try {
+      const {
+        level = 'all',
+        startDate,
+        endDate,
+        limit = 100,
+        category = 'all'
+      } = filters;
+
+      const logsDir = path.resolve(process.cwd(), 'logs');
+      const logFiles = await fs.readdir(logsDir);
+
+      // Get relevant log files
+      const relevantFiles = logFiles.filter(file => {
+        if (category !== 'all') {
+          return file.startsWith(category);
+        }
+        return file.endsWith('.log');
+      });
+
+      let allLogs = [];
+
+      // Read and parse log files
+      for (const file of relevantFiles) {
+        const filePath = path.join(logsDir, file);
+        const content = await fs.readFile(filePath, 'utf-8');
+        const lines = content.split('\n').filter(line => line.trim());
+
+        const parsedLogs = lines.map(line => {
+          try {
+            return JSON.parse(line);
+          } catch {
+            return {
+              timestamp: new Date().toISOString(),
+              level: 'info',
+              message: line
+            };
+          }
+        });
+
+        allLogs = allLogs.concat(parsedLogs);
+      }
+
+      // Apply filters
+      let filteredLogs = allLogs;
+
+      if (level !== 'all') {
+        filteredLogs = filteredLogs.filter(log => log.level === level);
+      }
+
+      if (startDate) {
+        filteredLogs = filteredLogs.filter(log =>
+          new Date(log.timestamp) >= new Date(startDate)
+        );
+      }
+
+      if (endDate) {
+        filteredLogs = filteredLogs.filter(log =>
+          new Date(log.timestamp) <= new Date(endDate)
+        );
+      }
+
+      // Sort by timestamp (most recent first)
+      filteredLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+      // Apply limit
+      filteredLogs = filteredLogs.slice(0, limit);
+
+      return {
+        logs: filteredLogs,
+        total: filteredLogs.length,
+        filters: filters,
+        availableCategories: ['combined', 'error', 'http'],
+        availableLevels: ['error', 'warn', 'info', 'debug']
+      };
+    } catch (error) {
+      log.error('Failed to get system logs', { error: error.message });
+      throw error;
+    }
+  },
+
+  /**
+   * Get database health and statistics
+   */
+  async getDatabaseHealth() {
+    try {
+      const dbMetrics = await this._getDatabaseMetrics();
+      const connectionInfo = await this._getDatabaseConnectionInfo();
+      const tableStats = await this._getDatabaseTableStats();
+
+      return {
+        status: 'healthy',
+        connection: connectionInfo,
+        metrics: dbMetrics,
+        tables: tableStats,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      log.error('Failed to get database health', { error: error.message });
+      return {
+        status: 'unhealthy',
+        error: error.message,
+        timestamp: new Date().toISOString()
+      };
+    }
+  },
+
+  /**
+   * Toggle maintenance mode
+   */
+  async toggleMaintenanceMode(enabled, reason = '', scheduledEnd = null) {
+    try {
+      // In a real application, you might store this in database or redis
+      // For now, we'll use a simple file-based approach
+      const fs = await import('fs/promises');
+      const path = await import('path');
+
+      const maintenanceFile = path.resolve(process.cwd(), '.maintenance');
+
+      if (enabled) {
+        const maintenanceInfo = {
+          enabled: true,
+          enabledAt: new Date().toISOString(),
+          reason: reason || 'Scheduled maintenance',
+          scheduledEnd: scheduledEnd || null,
+          enabledBy: 'Super Admin'
+        };
+
+        await fs.writeFile(maintenanceFile, JSON.stringify(maintenanceInfo, null, 2));
+
+        log.info('Maintenance mode enabled', maintenanceInfo);
+
+        return {
+          status: 'enabled',
+          message: 'Maintenance mode has been enabled',
+          details: maintenanceInfo
+        };
+      } else {
+        try {
+          await fs.unlink(maintenanceFile);
+        } catch (error) {
+          // File might not exist, which is fine
+        }
+
+        log.info('Maintenance mode disabled');
+
+        return {
+          status: 'disabled',
+          message: 'Maintenance mode has been disabled',
+          disabledAt: new Date().toISOString()
+        };
+      }
+    } catch (error) {
+      log.error('Failed to toggle maintenance mode', { error: error.message });
+      throw error;
+    }
+  },
+
+  // ==================== PRIVATE HELPER METHODS ====================
+
+  /**
+   * Check database health
+   */
+  async _checkDatabaseHealth() {
+    try {
+      const startTime = Date.now();
+
+      // Simple database query to test connectivity
+      await prisma.$queryRaw`SELECT 1 as test`;
+
+      const responseTime = Date.now() - startTime;
+
+      return {
+        status: 'healthy',
+        responseTime: `${responseTime}ms`,
+        message: 'Database connection successful'
+      };
+    } catch (error) {
+      return {
+        status: 'unhealthy',
+        error: error.message,
+        message: 'Database connection failed'
+      };
+    }
+  },
+
+  /**
+   * Check Stripe service health
+   */
+  async _checkStripeHealth() {
+    try {
+      const startTime = Date.now();
+
+      // Test Stripe connectivity
+      await stripe.accounts.retrieve();
+
+      const responseTime = Date.now() - startTime;
+
+      return {
+        status: 'healthy',
+        responseTime: `${responseTime}ms`,
+        message: 'Stripe connection successful'
+      };
+    } catch (error) {
+      return {
+        status: 'unhealthy',
+        error: error.message,
+        message: 'Stripe connection failed'
+      };
+    }
+  },
+
+  /**
+   * Check service dependencies
+   */
+  async _checkServiceDependencies() {
+    try {
+      // Add checks for external services here
+      // For now, we'll just check if required environment variables are set
+      const requiredEnvVars = [
+        'DATABASE_URL',
+        'JWT_SECRET',
+        'STRIPE_SECRET_KEY'
+      ];
+
+      const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+      if (missingVars.length > 0) {
+        return {
+          status: 'unhealthy',
+          message: `Missing environment variables: ${missingVars.join(', ')}`
+        };
+      }
+
+      return {
+        status: 'healthy',
+        message: 'All dependencies configured'
+      };
+    } catch (error) {
+      return {
+        status: 'unhealthy',
+        error: error.message,
+        message: 'Dependency check failed'
+      };
+    }
+  },
+
+  /**
+   * Get system metrics
+   */
+  _getSystemMetrics() {
+    const memUsage = process.memoryUsage();
+
+    return {
+      memory: {
+        used: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+        total: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+        external: `${Math.round(memUsage.external / 1024 / 1024)}MB`,
+        rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`
+      },
+      cpu: {
+        usage: process.cpuUsage()
+      },
+      nodejs: {
+        version: process.version,
+        uptime: process.uptime()
+      }
+    };
+  },
+
+  /**
+   * Get database metrics
+   */
+  async _getDatabaseMetrics() {
+    try {
+      const [userCount, subscriptionCount, paymentCount] = await Promise.all([
+        prisma.$queryRaw`SELECT 
+          (SELECT COUNT(*) FROM super_admins) as superAdmins,
+          (SELECT COUNT(*) FROM admins) as admins,
+          (SELECT COUNT(*) FROM trainers) as trainers,
+          (SELECT COUNT(*) FROM customers) as customers`,
+        prisma.subscription.count(),
+        prisma.payment.count()
+      ]);
+
+      // Convert BigInt values to regular numbers for JSON serialization
+      const userCounts = userCount[0];
+      const convertedUserCounts = {
+        superAdmins: Number(userCounts.superAdmins),
+        admins: Number(userCounts.admins),
+        trainers: Number(userCounts.trainers),
+        customers: Number(userCounts.customers)
+      };
+
+      return {
+        tables: {
+          users: convertedUserCounts,
+          subscriptions: subscriptionCount,
+          payments: paymentCount
+        },
+        connections: {
+          active: 'Available via Prisma pool'
+        }
+      };
+    } catch (error) {
+      log.error('Failed to get database metrics', { error: error.message });
+      return { error: error.message };
+    }
+  },
+
+  /**
+   * Get application metrics
+   */
+  _getApplicationMetrics() {
+    return {
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development',
+      nodeVersion: process.version,
+      platform: process.platform,
+      architecture: process.arch
+    };
+  },
+
+  /**
+   * Get business metrics
+   */
+  async _getBusinessMetrics() {
+    try {
+      const [activeSubscriptions, totalRevenue, todaySignups] = await Promise.all([
+        prisma.subscription.count({ where: { status: 'ACTIVE' } }),
+        prisma.payment.aggregate({
+          where: { status: 'COMPLETED' },
+          _sum: { amount: true }
+        }),
+        prisma.subscription.count({
+          where: {
+            createdAt: {
+              gte: new Date(new Date().setHours(0, 0, 0, 0))
+            }
+          }
+        })
+      ]);
+
+      return {
+        subscriptions: {
+          active: activeSubscriptions,
+          newToday: todaySignups
+        },
+        revenue: {
+          total: Number(totalRevenue._sum.amount || 0) / 100
+        }
+      };
+    } catch (error) {
+      log.error('Failed to get business metrics', { error: error.message });
+      return { error: error.message };
+    }
+  },
+
+  /**
+   * Get database connection info
+   */
+  async _getDatabaseConnectionInfo() {
+    try {
+      const result = await prisma.$queryRaw`SELECT CONNECTION_ID() as connectionId, DATABASE() as \`database\``;
+      return {
+        connectionId: Number(result[0]?.connectionId) || 'unknown',
+        database: result[0]?.database || 'unknown',
+        status: 'connected'
+      };
+    } catch (error) {
+      return {
+        status: 'error',
+        error: error.message
+      };
+    }
+  },
+
+  /**
+   * Get database table statistics
+   */
+  async _getDatabaseTableStats() {
+    try {
+      const tables = ['super_admins', 'admins', 'trainers', 'customers', 'subscriptions', 'payments'];
+      const stats = {};
+
+      for (const table of tables) {
+        // Get table size information from information_schema
+        const result = await prisma.$queryRaw`
+          SELECT 
+            TABLE_ROWS as rowCount,
+            DATA_LENGTH as dataSize,
+            INDEX_LENGTH as indexSize
+          FROM information_schema.TABLES 
+          WHERE TABLE_SCHEMA = DATABASE() 
+          AND TABLE_NAME = ${table}
+        `;
+
+        // Convert BigInt values to numbers for JSON serialization
+        const tableData = result[0] || { rowCount: 0, dataSize: 0, indexSize: 0 };
+
+        stats[table] = {
+          rowCount: Number(tableData.rowCount || 0),
+          dataSize: Number(tableData.dataSize || 0),
+          indexSize: Number(tableData.indexSize || 0)
+        };
+      }
+
+      return stats;
+    } catch (error) {
+      log.error('Failed to get table stats', { error: error.message });
+      return { error: error.message };
     }
   }
 };

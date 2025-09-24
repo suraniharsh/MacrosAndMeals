@@ -1114,5 +1114,208 @@ export const superAdminController = {
         error: 'REFUND_PROCESSING_ERROR'
       });
     }
+  },
+
+  // ==================== SYSTEM HEALTH & MONITORING ====================
+
+  /**
+   * Get comprehensive system health status
+   * GET /api/super-admin/system/health
+   */
+  getSystemHealth: async (req, res) => {
+    const logger = req.logger;
+
+    try {
+      logger.business('Super Admin accessing system health', {
+        userId: req.user.id
+      });
+
+      const healthData = await superAdminService.getSystemHealth();
+
+      return res.json({
+        success: true,
+        message: 'System health retrieved successfully',
+        data: healthData
+      });
+
+    } catch (error) {
+      logger.error('Failed to get system health', {
+        userId: req.user.id,
+        error: error.message
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve system health',
+        error: 'SYSTEM_HEALTH_ERROR'
+      });
+    }
+  },
+
+  /**
+   * Get system performance metrics
+   * GET /api/super-admin/system/metrics
+   */
+  getSystemMetrics: async (req, res) => {
+    const logger = req.logger;
+
+    try {
+      logger.business('Super Admin accessing system metrics', {
+        userId: req.user.id
+      });
+
+      const metrics = await superAdminService.getSystemMetrics();
+
+      return res.json({
+        success: true,
+        message: 'System metrics retrieved successfully',
+        data: metrics
+      });
+
+    } catch (error) {
+      logger.error('Failed to get system metrics', {
+        userId: req.user.id,
+        error: error.message
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve system metrics',
+        error: 'SYSTEM_METRICS_ERROR'
+      });
+    }
+  },
+
+  /**
+   * Get system logs with filtering
+   * GET /api/super-admin/system/logs
+   */
+  getSystemLogs: async (req, res) => {
+    const logger = req.logger;
+
+    try {
+      const {
+        level = 'all',
+        startDate,
+        endDate,
+        limit = 100,
+        category = 'all'
+      } = req.query;
+
+      logger.business('Super Admin accessing system logs', {
+        userId: req.user.id,
+        filters: { level, startDate, endDate, limit, category }
+      });
+
+      const logsData = await superAdminService.getSystemLogs({
+        level,
+        startDate,
+        endDate,
+        limit: parseInt(limit),
+        category
+      });
+
+      return res.json({
+        success: true,
+        message: 'System logs retrieved successfully',
+        data: logsData
+      });
+
+    } catch (error) {
+      logger.error('Failed to get system logs', {
+        userId: req.user.id,
+        error: error.message
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve system logs',
+        error: 'SYSTEM_LOGS_ERROR'
+      });
+    }
+  },
+
+  /**
+   * Get database health and statistics
+   * GET /api/super-admin/system/database
+   */
+  getDatabaseHealth: async (req, res) => {
+    const logger = req.logger;
+
+    try {
+      logger.business('Super Admin accessing database health', {
+        userId: req.user.id
+      });
+
+      const dbHealth = await superAdminService.getDatabaseHealth();
+
+      return res.json({
+        success: true,
+        message: 'Database health retrieved successfully',
+        data: dbHealth
+      });
+
+    } catch (error) {
+      logger.error('Failed to get database health', {
+        userId: req.user.id,
+        error: error.message
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve database health',
+        error: 'DATABASE_HEALTH_ERROR'
+      });
+    }
+  },
+
+  /**
+   * Toggle maintenance mode
+   * POST /api/super-admin/system/maintenance
+   */
+  toggleMaintenanceMode: async (req, res) => {
+    const logger = req.logger;
+
+    try {
+      const { enabled, reason, scheduledEnd } = req.body;
+
+      if (typeof enabled !== 'boolean') {
+        return res.status(400).json({
+          success: false,
+          message: 'Enabled field must be a boolean',
+          error: 'INVALID_INPUT'
+        });
+      }
+
+      logger.business('Super Admin toggling maintenance mode', {
+        userId: req.user.id,
+        enabled,
+        reason
+      });
+
+      const result = await superAdminService.toggleMaintenanceMode(
+        enabled,
+        reason,
+        scheduledEnd
+      );
+
+      return res.json({
+        success: true,
+        message: result.message,
+        data: result
+      });
+
+    } catch (error) {
+      logger.error('Failed to toggle maintenance mode', {
+        userId: req.user.id,
+        error: error.message
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to toggle maintenance mode',
+        error: 'MAINTENANCE_MODE_ERROR'
+      });
+    }
   }
 };

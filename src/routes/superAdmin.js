@@ -45,4 +45,21 @@ router.get('/subscriptions/failed-payments', superAdminController.getFailedPayme
 // Process subscription refund
 router.post('/subscriptions/:id/refund', superAdminController.processSubscriptionRefund);
 
+// ==================== SYSTEM HEALTH & MONITORING ====================
+
+// Get comprehensive system health status
+router.get('/system/health', superAdminController.getSystemHealth);
+
+// Get system performance metrics  
+router.get('/system/metrics', superAdminController.getSystemMetrics);
+
+// Get system logs with filtering
+router.get('/system/logs', superAdminController.getSystemLogs);
+
+// Get database health and statistics
+router.get('/system/database', superAdminController.getDatabaseHealth);
+
+// Toggle maintenance mode
+router.post('/system/maintenance', superAdminController.toggleMaintenanceMode);
+
 export default router;
